@@ -1,24 +1,39 @@
 {
-	"name": "obsidian-sample-plugin",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"name": "github-issues",
+	"version": "0.0.0",
+	"description": "Track GitHub issues and pull requests in Obsidian",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
 		"build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-		"version": "node version-bump.mjs && git add manifest.json versions.json"
+		"format": "npx prettier . --write",
+		"version": "node version-bump.mjs"
 	},
-	"keywords": [],
-	"author": "",
+	"keywords": [
+		"obsidian",
+		"github",
+		"tracker",
+		"issues",
+		"pull-requests"
+	],
+	"author": "LonoxX",
 	"license": "MIT",
 	"devDependencies": {
-		"@types/node": "^16.11.6",
-		"@typescript-eslint/eslint-plugin": "5.29.0",
-		"@typescript-eslint/parser": "5.29.0",
-		"builtin-modules": "3.3.0",
-		"esbuild": "0.17.3",
+		"@types/node": "^24.0.3",
+		"@typescript-eslint/eslint-plugin": "^8.34.1",
+		"@typescript-eslint/parser": "^8.34.1",
+		"builtin-modules": "^5.0.0",
+		"esbuild": "^0.25.5",
+		"eslint": "^9.29.0",
 		"obsidian": "latest",
-		"tslib": "2.4.0",
-		"typescript": "4.7.4"
+		"tslib": "^2.8.1",
+		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"date-fns": "^4.1.0",
+		"fs": "^0.0.1-security",
+		"octokit": "^5.0.3",
+		"path": "^0.12.7",
+		"prettier": "^3.5.3"
 	}
 }
