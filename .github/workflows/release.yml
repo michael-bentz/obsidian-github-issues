@@ -49,8 +49,7 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      - name: Create release
+      - name: Update version files
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -68,31 +67,76 @@ jobs:
             # Run version-bump script to update manifest.json and versions.json
             npm run version
             echo "Updated manifest.json and versions.json via version-bump script"
+
+            # Show which files were changed
+            echo "Files changed by version update:"
+            git status --porcelain
           else
             echo "Version is already $NEW_VERSION, skipping version updates"
           fi
 
-          npm run build
+      - name: Build plugin
+        run: npm run build
 
+      - name: Verify build artifacts
+        run: |
           ls -la dist/
           test -f dist/main.js || exit 1
           test -f dist/manifest.json || exit 1
           test -f dist/styles.css || exit 1
+          echo "All required build artifacts are present"
+
+      - name: Commit and push version changes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ needs.check-version.outputs.version }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add .
-          git diff --quiet || git commit -m "Release version $NEW_VERSION"
+          # Check if there are any changes to commit
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Changes detected, committing version files:"
+            git status --porcelain
+
+            # Add all version-related files
+            git add package.json manifest.json versions.json
+
+            # Commit the changes
+            git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+
+            # Push the changes back to master
+            git push origin master
+            echo "Version changes pushed to repository"
+          else
+            echo "No changes to commit"
+          fi
+
+      - name: Create and push tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ needs.check-version.outputs.version }}"
+
+          # Create and push the tag
           git tag $NEW_VERSION
-
-          git push origin master
           git push origin $NEW_VERSION
+          echo "Tag $NEW_VERSION created and pushed"
 
+      - name: Create GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NEW_VERSION="${{ needs.check-version.outputs.version }}"
+
+          # Create the release with the built artifacts
           gh release create $NEW_VERSION \
             --title "$NEW_VERSION" \
-            --notes "Release $NEW_VERSION" \
+            --notes "Automated release $NEW_VERSION" \
             --latest \
             dist/main.js \
             dist/manifest.json \
             dist/styles.css
+
+          echo "GitHub release $NEW_VERSION created successfully"

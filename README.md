@@ -2,6 +2,8 @@
 
 An Obsidian plugin that integrates with GitHub to track issues and pull requests directly in your vault.
 
+The configurations are heavily inspired by https://github.com/schaier-io, including some specific settings. However, I had already started working on my prototype before I discovered the plugin, and had initially even given it a similar name.
+
 ## ✨ Features
 
 - Track issues and pull requests from specific GitHub repositories
