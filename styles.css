@@ -1099,3 +1099,16 @@ button:disabled {
 .selected-count {
 	font-weight: 600;
 }
+
+.github-issues-fade-out {
+	opacity: 0;
+}
+
+.github-issues-fade-in {
+	opacity: 1;
+	transition: opacity 0.3s ease-in-out;
+}
+
+.github-issues-fade-transition {
+	transition: opacity 0.3s ease-in-out;
+}

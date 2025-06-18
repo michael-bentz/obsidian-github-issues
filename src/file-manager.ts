@@ -590,7 +590,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				const folder =
 					this.app.vault.getAbstractFileByPath(issueFolder);
 				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.vault.delete(folder, true);
+					await this.app.fileManager.trashFile(folder);
 				}
 			}
 
@@ -604,7 +604,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 					this.noticeManager.info(
 						`Deleting empty folder: ${issueOwnerFolder.path}`,
 					);
-					await this.app.vault.delete(issueOwnerFolder, true);
+					await this.app.fileManager.trashFile(issueOwnerFolder);
 				}
 			}
 		}
@@ -650,7 +650,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				const folder =
 					this.app.vault.getAbstractFileByPath(pullRequestFolder);
 				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.vault.delete(folder, true);
+					await this.app.fileManager.trashFile(folder);
 				}
 			}
 
@@ -664,7 +664,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 					this.noticeManager.info(
 						`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
 					);
-					await this.app.vault.delete(pullRequestOwnerFolder, true);
+					await this.app.fileManager.trashFile(pullRequestOwnerFolder);
 				}
 			}
 		}

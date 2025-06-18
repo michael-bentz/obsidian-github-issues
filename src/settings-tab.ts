@@ -539,13 +539,12 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			searchButton.addClass("github-issues-loading");
 
 			await this.renderAvailableRepositories(reposResultsContainer);
-			reposResultsContainer.style.opacity = "0";
+			reposResultsContainer.addClass("github-issues-fade-out");
 			reposResultsContainer.removeClass("github-issues-hidden");
 
 			setTimeout(() => {
-				reposResultsContainer.style.opacity = "1";
-				reposResultsContainer.style.transition =
-					"opacity 0.3s ease-in-out";
+				reposResultsContainer.removeClass("github-issues-fade-out");
+				reposResultsContainer.addClass("github-issues-fade-in");
 			}, 10);
 
 			if (buttonText) {
