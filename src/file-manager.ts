@@ -467,30 +467,30 @@ export class FileManager {
 		comments: any[],
 	): string {
 		return `---
-			title: "${escapeBody(issue.title, this.settings.escapeMode)}"
-			status: "${issue.state}"
-			created: "${
-				this.settings.dateFormat !== ""
-					? format(
-							new Date(issue.created_at),
-							this.settings.dateFormat,
-						)
-					: new Date(issue.created_at).toLocaleString()
-			}"
-			url: "${issue.html_url}"
-			opened_by: "${issue.user?.login}"
-			assignees: [${(
-				issue.assignees?.map(
-					(assignee: { login: string }) => '"' + assignee.login + '"',
-				) || []
-			).join(", ")}]
-			labels: [${(
-				issue.labels?.map(
-					(label: { name: string }) => '"' + label.name + '"',
-				) || []
-			).join(", ")}]
-			updateMode: "${repo.issueUpdateMode}"
-			allowDelete: ${repo.allowDeleteIssue ? true : false}
+title: "${escapeBody(issue.title, this.settings.escapeMode)}"
+status: "${issue.state}"
+created: "${
+	this.settings.dateFormat !== ""
+		? format(
+	new Date(issue.created_at),
+	this.settings.dateFormat,
+)
+		: new Date(issue.created_at).toLocaleString()
+}"
+url: "${issue.html_url}"
+opened_by: "${issue.user?.login}"
+assignees: [${(
+	issue.assignees?.map(
+		(assignee: { login: string }) => '"' + assignee.login + '"',
+	) || []
+).join(", ")}]
+labels: [${(
+	issue.labels?.map(
+		(label: { name: string }) => '"' + label.name + '"',
+	) || []
+).join(", ")}]
+updateMode: "${repo.issueUpdateMode}"
+allowDelete: ${repo.allowDeleteIssue ? true : false}
 ---
 
 # ${escapeBody(issue.title, this.settings.escapeMode)}
