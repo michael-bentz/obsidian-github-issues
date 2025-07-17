@@ -35,8 +35,8 @@ The configurations are heavily inspired by https://github.com/schaier-io, includ
 1. Create a new GitHub token with the `repo` and `read:org` permissions
    → [GitHub Settings > Developer Settings > Personal access tokens](https://github.com/settings/tokens)
 2. Configure the plugin in Obsidian settings:
-   - Paste your GitHub token in the **GitHub Token** field
-   - Adjust additional settings as needed
+    - Paste your GitHub token in the **GitHub Token** field
+    - Adjust additional settings as needed
 
 ## 📦 Adding Repositories
 

@@ -1,33 +1,14 @@
-export function extractProperties(content: string): Record<string, string> {
-	const properties: Record<string, string> = {};
+import { App, TFile } from "obsidian";
 
-	// Check if content has frontmatter
-	const match = content.match(/^---\n([\s\S]*?)\n---/);
-	if (!match) return properties;
-
-	const frontmatter = match[1];
-	const lines = frontmatter.split("\n");
-
-	for (const line of lines) {
-		const [key, ...valueParts] = line.split(":");
-		if (!key || !valueParts.length) continue;
-
-		const value = valueParts.join(":").trim();
-		if (value) {
-			properties[key.trim()] = value;
-		}
-	}
-
-	return properties;
+export function extractProperties(app: App, file: TFile): Record<string, any> {
+	const cache = app.metadataCache.getFileCache(file);
+	return cache?.frontmatter || {};
 }
 
-export function mapToProperties(content: Record<string, string>): string {
-	const propertiesString = Object.entries(content)
-		.map(([key, value]) => `${key}: ${value}`)
-		.join("\n");
-
-	return `---
-${propertiesString}
----
-`;
+export async function updateProperties(
+	app: App,
+	file: TFile,
+	updater: (frontmatter: Record<string, any>) => void,
+): Promise<void> {
+	await app.fileManager.processFrontMatter(file, updater);
 }

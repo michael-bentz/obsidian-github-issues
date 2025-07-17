@@ -548,7 +548,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			}, 10);
 
 			if (buttonText) {
-				buttonText.textContent = "Refresh Repositories";
+				buttonText.textContent = "Refresh repositories";
 			}
 
 			const spinnerIcon = searchButton.querySelector(
@@ -591,7 +591,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		tabsContainer.addClass("github-issues-tabs-container");
 
 		const manualTab = tabsContainer.createEl("button");
-		manualTab.setText("Manual Entry");
+		manualTab.setText("Manual entry");
 		manualTab.addClass("mod-cta");
 
 		const githubTab = tabsContainer.createEl("button");
@@ -1209,7 +1209,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	): Promise<void> {
 		const modal = new Modal(this.app);
 		modal.containerEl.addClass("github-issues-modal");
-		modal.titleEl.setText("Delete Repository");
+		modal.titleEl.setText("Delete repository");
 
 		const contentContainer = modal.contentEl.createDiv(
 			"github-issues-delete-modal-content",
@@ -1254,7 +1254,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		setIcon(deleteIcon, "trash-2");
 		confirmDeleteButton.createEl("span", {
 			cls: "github-issues-button-text",
-			text: "Delete Repository",
+			text: "Delete repository",
 		});
 		confirmDeleteButton.addClass("mod-warning");
 		confirmDeleteButton.onclick = async () => {
@@ -1488,7 +1488,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			setIcon(selectAllIcon, "check");
 			selectAllButton.createEl("span", {
 				cls: "github-issues-button-text",
-				text: "Select All",
+				text: "Select all",
 			});
 			selectAllButton.addClass("github-issues-select-all-button");
 			const selectNoneButton = selectionControls.createEl("button");
@@ -1498,7 +1498,7 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			setIcon(selectNoneIcon, "x");
 			selectNoneButton.createEl("span", {
 				cls: "github-issues-button-text",
-				text: "Select None",
+				text: "Select none",
 			});
 			selectNoneButton.addClass("github-issues-select-none-button");
 			const addSelectedButton = bulkActionsContainer.createEl("button");

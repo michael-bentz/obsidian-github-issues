@@ -2,7 +2,7 @@ import { App, TFile, TFolder } from "obsidian";
 import { format } from "date-fns";
 import { GitHubTrackerSettings, RepositoryTracking } from "./types";
 import { escapeBody } from "./util/escapeUtils";
-import { extractProperties, mapToProperties } from "./util/properties";
+import { extractProperties, updateProperties } from "./util/properties";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
 
@@ -162,8 +162,7 @@ export class FileManager {
 				}
 
 				if (shouldDelete) {
-					const fileContent = await this.app.vault.read(file);
-					const properties = extractProperties(fileContent);
+					const properties = extractProperties(this.app, file);
 					const allowDelete = properties.allowDelete
 						? properties.allowDelete
 								.toLowerCase()
@@ -222,8 +221,7 @@ export class FileManager {
 				}
 
 				if (shouldDelete) {
-					const fileContent = await this.app.vault.read(file);
-					const properties = extractProperties(fileContent);
+					const properties = extractProperties(this.app, file);
 					const allowDelete = properties.allowDelete
 						? properties.allowDelete
 								.toLowerCase()
@@ -267,12 +265,8 @@ export class FileManager {
 
 		if (file) {
 			if (file instanceof TFile) {
-				const fileContent = await this.app.vault.read(file);
-				const properties = extractProperties(fileContent);
-				properties.assignees =
-					issue.assignees?.map((a: { login: string }) => a.login) ||
-					[];
-
+				// Use Obsidian's MetadataCache to get frontmatter
+				const properties = extractProperties(this.app, file);
 				const updateModeText = properties.updateMode;
 
 				if (!updateModeText) {
@@ -286,24 +280,13 @@ export class FileManager {
 					: repo.issueUpdateMode;
 
 				if (updateMode === "update") {
-					content = `${mapToProperties(properties)}\n\n# ${escapeBody(
-						issue.title,
-						this.settings.escapeMode,
-					)}\n${
-						issue.body
-							? escapeBody(issue.body, this.settings.escapeMode)
-							: "No description found"
-					}\n`;
-
-					// Add comments section
-					if (comments.length > 0) {
-						content += this.formatComments(
-							comments,
-							this.settings.escapeMode,
-						);
-					}
-
-					await this.app.vault.modify(file, content);
+					// Create the complete new content with updated frontmatter
+					const updatedContent = this.createIssueContent(
+						issue,
+						repo,
+						comments,
+					);
+					await this.app.vault.modify(file, updatedContent);
 					this.noticeManager.debug(`Updated issue ${issue.number}`);
 				} else if (updateMode === "append") {
 					content = `---\n### New status: "${
@@ -323,7 +306,8 @@ export class FileManager {
 							this.settings.escapeMode,
 						);
 					}
-					const newContent = fileContent + "\n\n" + content;
+					const currentFileContent = await this.app.vault.read(file);
+					const newContent = currentFileContent + "\n\n" + content;
 					await this.app.vault.modify(file, newContent);
 					this.noticeManager.debug(
 						`Appended content to issue ${issue.number}`,
@@ -374,15 +358,8 @@ export class FileManager {
 
 		if (file) {
 			if (file instanceof TFile) {
-				const fileContent = await this.app.vault.read(file);
-				const properties = extractProperties(fileContent);
-				properties.assignees =
-					pr.assignees?.map((a: { login: string }) => a.login) || [];
-				properties.requested_reviewers =
-					pr.requested_reviewers?.map(
-						(r: { login: string }) => r.login,
-					) || [];
-
+				// Use Obsidian's MetadataCache to get frontmatter
+				const properties = extractProperties(this.app, file);
 				const updateModeText = properties.updateMode;
 
 				if (!updateModeText) {
@@ -396,24 +373,13 @@ export class FileManager {
 					: repo.pullRequestUpdateMode;
 
 				if (updateMode === "update") {
-					content = `${mapToProperties(properties)}\n\n# ${escapeBody(
-						pr.title,
-						this.settings.escapeMode,
-					)}\n${
-						pr.body
-							? escapeBody(pr.body, this.settings.escapeMode)
-							: "No description found"
-					}\n`;
-
-					// Add comments section
-					if (comments.length > 0) {
-						content += this.formatComments(
-							comments,
-							this.settings.escapeMode,
-						);
-					}
-
-					await this.app.vault.modify(file, content);
+					// Create the complete new content with updated frontmatter
+					const updatedContent = this.createPullRequestContent(
+						pr,
+						repo,
+						comments,
+					);
+					await this.app.vault.modify(file, updatedContent);
 					this.noticeManager.debug(`Updated PR ${pr.number}`);
 				} else if (updateMode === "append") {
 					content = `---\n### New status: "${
@@ -433,7 +399,8 @@ export class FileManager {
 						);
 					}
 
-					const newContent = fileContent + "\n\n" + content;
+					const currentFileContent = await this.app.vault.read(file);
+					const newContent = currentFileContent + "\n\n" + content;
 					await this.app.vault.modify(file, newContent);
 					this.noticeManager.debug(
 						`Appended content to PR ${pr.number}`,
@@ -470,25 +437,22 @@ export class FileManager {
 title: "${escapeBody(issue.title, this.settings.escapeMode)}"
 status: "${issue.state}"
 created: "${
-	this.settings.dateFormat !== ""
-		? format(
-	new Date(issue.created_at),
-	this.settings.dateFormat,
-)
-		: new Date(issue.created_at).toLocaleString()
-}"
+			this.settings.dateFormat !== ""
+				? format(new Date(issue.created_at), this.settings.dateFormat)
+				: new Date(issue.created_at).toLocaleString()
+		}"
 url: "${issue.html_url}"
 opened_by: "${issue.user?.login}"
 assignees: [${(
-	issue.assignees?.map(
-		(assignee: { login: string }) => '"' + assignee.login + '"',
-	) || []
-).join(", ")}]
+			issue.assignees?.map(
+				(assignee: { login: string }) => '"' + assignee.login + '"',
+			) || []
+		).join(", ")}]
 labels: [${(
-	issue.labels?.map(
-		(label: { name: string }) => '"' + label.name + '"',
-	) || []
-).join(", ")}]
+			issue.labels?.map(
+				(label: { name: string }) => '"' + label.name + '"',
+			) || []
+		).join(", ")}]
 updateMode: "${repo.issueUpdateMode}"
 allowDelete: ${repo.allowDeleteIssue ? true : false}
 ---
@@ -563,9 +527,8 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 			if (!repo.trackIssues) {
 				for (const file of files) {
 					if (file instanceof TFile) {
-						// Read the file properties
-						const fileContent = await this.app.vault.read(file);
-						const properties = extractProperties(fileContent);
+						// Use Obsidian's MetadataCache to get frontmatter
+						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
 							? properties.allowDelete
 									.toLowerCase()
@@ -624,8 +587,8 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 			if (!repo.trackPullRequest) {
 				for (const file of files) {
 					if (file instanceof TFile) {
-						const fileContent = await this.app.vault.read(file);
-						const properties = extractProperties(fileContent);
+						// Use Obsidian's MetadataCache to get frontmatter
+						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
 							? properties.allowDelete
 									.toLowerCase()
@@ -664,7 +627,9 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 					this.noticeManager.info(
 						`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
 					);
-					await this.app.fileManager.trashFile(pullRequestOwnerFolder);
+					await this.app.fileManager.trashFile(
+						pullRequestOwnerFolder,
+					);
 				}
 			}
 		}

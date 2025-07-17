@@ -82,13 +82,10 @@ export default class GitHubTrackerPlugin extends Plugin {
 		const statusBarItemEl = this.addStatusBarItem();
 		statusBarItemEl.setText("GitHub");
 		this.addCommand({
-			id: "sync-github-issues-pull-requests",
-			name: "Sync GitHub Issues & Pull Requests",
-			callback: () => {
-				this.sync();
-			},
+			id: "sync-issues-and-pull-requests",
+			name: "Sync GitHub issues & pull requests",
+			callback: () => this.sync(),
 		});
-
 		this.addSettingTab(new GitHubTrackerSettingTab(this.app, this));
 		this.startBackgroundSync();
 	}
