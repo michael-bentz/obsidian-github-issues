@@ -164,10 +164,10 @@ export class FileManager {
 				if (shouldDelete) {
 					const properties = extractProperties(this.app, file);
 					const allowDelete = properties.allowDelete
-						? properties.allowDelete
-								.toLowerCase()
-								.replace('"', "") === "true"
-						: repo.allowDeleteIssue;
+					? String(properties.allowDelete)
+							.toLowerCase()
+							.replace('"', "") === "true"
+					: repo.allowDeleteIssue;
 
 					if (allowDelete) {
 						await this.app.fileManager.trashFile(file);
@@ -223,10 +223,10 @@ export class FileManager {
 				if (shouldDelete) {
 					const properties = extractProperties(this.app, file);
 					const allowDelete = properties.allowDelete
-						? properties.allowDelete
-								.toLowerCase()
-								.replace('"', "") === "true"
-						: repo.allowDeletePullRequest;
+					? String(properties.allowDelete)
+							.toLowerCase()
+							.replace('"', "") === "true"
+					: repo.allowDeletePullRequest;
 
 					if (allowDelete) {
 						await this.app.fileManager.trashFile(file);
@@ -530,10 +530,10 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 						// Use Obsidian's MetadataCache to get frontmatter
 						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
-							? properties.allowDelete
-									.toLowerCase()
-									.replace('"', "") === "true"
-							: false;
+						? String(properties.allowDelete)
+							.toLowerCase()
+							.replace('"', "") === "true"
+						: false;
 
 						if (allowDelete) {
 							await this.app.fileManager.trashFile(file);
@@ -590,10 +590,10 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 						// Use Obsidian's MetadataCache to get frontmatter
 						const properties = extractProperties(this.app, file);
 						const allowDelete = properties.allowDelete
-							? properties.allowDelete
-									.toLowerCase()
-									.replace('"', "") === "true"
-							: false;
+						? String(properties.allowDelete)
+							.toLowerCase()
+							.replace('"', "") === "true"
+						: false;
 
 						if (allowDelete) {
 							await this.app.fileManager.trashFile(file);
