@@ -8,6 +8,8 @@ export interface RepositoryTracking {
 	pullRequestFolder: string;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
+	includeIssueComments: boolean;
+	includePullRequestComments: boolean;
 }
 
 export interface GitHubTrackerSettings {
@@ -47,4 +49,6 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	pullRequestFolder: "GitHub Pull Requests",
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
+	includeIssueComments: true,
+	includePullRequestComments: true,
 };

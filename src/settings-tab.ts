@@ -1348,6 +1348,20 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(issuesSettingsContainer)
+			.setName("Include issue comments")
+			.setDesc(
+				"If enabled, comments from issues will be included in the generated files",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.includeIssueComments)
+					.onChange(async (value) => {
+						repo.includeIssueComments = value;
+						await this.plugin.saveSettings();
+					}),
+			);
 	}
 
 	private renderPullRequestSettings(
@@ -1432,6 +1446,20 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					.setValue(repo.allowDeletePullRequest)
 					.onChange(async (value) => {
 						repo.allowDeletePullRequest = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Include pull request comments")
+			.setDesc(
+				"If enabled, comments from pull requests will be included in the generated files",
+			)
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.includePullRequestComments)
+					.onChange(async (value) => {
+						repo.includePullRequestComments = value;
 						await this.plugin.saveSettings();
 					}),
 			);
