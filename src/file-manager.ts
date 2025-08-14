@@ -334,11 +334,20 @@ export class FileManager {
 		);
 
 		const [owner, repoName] = repo.repository.split("/");
-		const comments = await this.gitHubClient.fetchIssueComments(
-			owner,
-			repoName,
-			issue.number,
-		);
+
+		// Only fetch comments if they should be included
+		let comments: any[] = [];
+		if (repo.includeIssueComments) {
+			comments = await this.gitHubClient.fetchIssueComments(
+				owner,
+				repoName,
+				issue.number,
+			);
+		} else {
+			this.noticeManager.debug(
+				`Skipping comments for issue ${issue.number}: repository setting disabled`,
+			);
+		}
 
 		let content = this.createIssueContent(issue, repo, comments);
 
@@ -427,11 +436,20 @@ export class FileManager {
 		);
 
 		const [owner, repoName] = repo.repository.split("/");
-		const comments = await this.gitHubClient.fetchPullRequestComments(
-			owner,
-			repoName,
-			pr.number,
-		);
+
+		// Only fetch comments if they should be included
+		let comments: any[] = [];
+		if (repo.includePullRequestComments) {
+			comments = await this.gitHubClient.fetchPullRequestComments(
+				owner,
+				repoName,
+				pr.number,
+			);
+		} else {
+			this.noticeManager.debug(
+				`Skipping comments for PR ${pr.number}: repository setting disabled`,
+			);
+		}
 
 		let content = this.createPullRequestContent(pr, repo, comments);
 

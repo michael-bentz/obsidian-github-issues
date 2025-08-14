@@ -20,6 +20,8 @@ export interface RepositoryTracking {
 	enablePrAssigneeFilter: boolean;
 	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
 	prAssigneeFilters: string[];
+	includeIssueComments: boolean;
+	includePullRequestComments: boolean;
 }
 
 export interface GitHubTrackerSettings {
@@ -71,4 +73,6 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	enablePrAssigneeFilter: false,
 	prAssigneeFilterMode: "assigned-to-me",
 	prAssigneeFilters: [],
+	includeIssueComments: true,
+	includePullRequestComments: true,
 };
