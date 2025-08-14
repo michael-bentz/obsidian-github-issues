@@ -11,7 +11,7 @@ import { NoticeManager } from "./notice-manager";
 
 export default class GitHubTrackerPlugin extends Plugin {
 	settings: GitHubTrackerSettings = DEFAULT_SETTINGS;
-	private gitHubClient: GitHubClient | null = null;
+	public gitHubClient: GitHubClient | null = null;
 	private fileManager: FileManager | null = null;
 	private noticeManager!: NoticeManager;
 	private isSyncing: boolean = false;
@@ -35,6 +35,130 @@ export default class GitHubTrackerPlugin extends Plugin {
 		} catch (error: unknown) {
 			this.noticeManager.error(
 				"Error syncing issues and pull requests",
+				error,
+			);
+		}
+		this.isSyncing = false;
+	}
+
+	async syncSingleRepository(repositoryName: string) {
+		if (this.isSyncing) {
+			this.noticeManager.warning("Already syncing...");
+			return;
+		}
+
+		if (!this.gitHubClient || !this.fileManager) {
+			this.noticeManager.error(
+				"GitHub client or file manager not initialized",
+			);
+			return;
+		}
+
+		const repo = this.settings.repositories.find(
+			(r) => r.repository === repositoryName,
+		);
+
+		if (!repo) {
+			this.noticeManager.error(
+				`Repository ${repositoryName} not found in settings`,
+			);
+			return;
+		}
+
+		this.isSyncing = true;
+		try {
+			this.noticeManager.info(`Syncing repository: ${repositoryName}`);
+			const [owner, repoName] = repo.repository.split("/");
+			if (!owner || !repoName) {
+				this.noticeManager.error(
+					`Invalid repository format: ${repositoryName}`,
+				);
+				return;
+			}
+
+			// Sync Issues
+			if (repo.trackIssues) {
+				this.noticeManager.debug(
+					`Fetching issues for ${repo.repository}`,
+				);
+				const allIssuesIncludingRecentlyClosed =
+					await this.gitHubClient.fetchRepositoryIssues(
+						owner,
+						repoName,
+						true,
+						this.settings.cleanupClosedIssuesDays,
+					);
+
+				const openIssues = allIssuesIncludingRecentlyClosed.filter(
+					(issue: { state: string }) => issue.state === "open",
+				);
+
+				const filteredIssues = this.fileManager.filterIssues(
+					repo,
+					openIssues,
+				);
+
+				this.noticeManager.debug(
+					`Processing ${filteredIssues.length} issues (from ${openIssues.length} open issues) for ${repo.repository}`,
+				);
+
+				const currentIssueNumbers = new Set(
+					filteredIssues.map((issue: any) => issue.number.toString()),
+				);
+
+				await this.fileManager.createIssueFiles(
+					repo,
+					filteredIssues,
+					allIssuesIncludingRecentlyClosed,
+					currentIssueNumbers,
+				);
+			}
+
+			// Sync Pull Requests
+			if (repo.trackPullRequest) {
+				this.noticeManager.debug(
+					`Fetching pull requests for ${repo.repository}`,
+				);
+
+				const allPullRequestsIncludingRecentlyClosed =
+					await this.gitHubClient.fetchRepositoryPullRequests(
+						owner,
+						repoName,
+						true,
+						this.settings.cleanupClosedIssuesDays,
+					);
+
+				const openPullRequests =
+					allPullRequestsIncludingRecentlyClosed.filter(
+						(pr: { state: string }) => pr.state === "open",
+					);
+
+				const filteredPRs = this.fileManager.filterPullRequests(
+					repo,
+					openPullRequests,
+				);
+
+				this.noticeManager.debug(
+					`Processing ${filteredPRs.length} pull requests (from ${openPullRequests.length} open PRs) for ${repo.repository}`,
+				);
+
+				const currentPRNumbers = new Set(
+					filteredPRs.map((pr: any) => pr.number.toString()),
+				);
+
+				await this.fileManager.createPullRequestFiles(
+					repo,
+					filteredPRs,
+					allPullRequestsIncludingRecentlyClosed,
+					currentPRNumbers,
+				);
+			}
+
+			await this.fileManager?.cleanupEmptyFolders();
+			this.noticeManager.success(`Successfully synced ${repositoryName}`);
+		} catch (error: unknown) {
+			this.noticeManager.error(
+				`Error syncing repository ${repositoryName}`,
 				error,
 			);
 		}
@@ -130,6 +254,11 @@ export default class GitHubTrackerPlugin extends Plugin {
 	async loadSettings() {
 		const loadedData = await this.loadData();
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
+
+		// Migrate existing repositories to include new label filter properties
+		this.settings.repositories = this.settings.repositories.map(repo =>
+			Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo)
+		);
 	}
 
 	async saveSettings() {

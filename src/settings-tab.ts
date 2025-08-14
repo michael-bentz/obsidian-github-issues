@@ -35,8 +35,15 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					.onChange(async (value) => {
 						this.plugin.settings.githubToken = value;
 						await this.plugin.saveSettings();
+						this.updateTokenBadge(); // Update badge when token changes
 					}),
 			);
+
+		// Add token status badge
+		const tokenBadgeContainer = containerEl.createDiv("github-issues-token-badge-container");
+		// Update badge asynchronously without blocking the UI
+		setTimeout(() => this.updateTokenBadge(tokenBadgeContainer), 0);
+
 		const tokenInfo = containerEl.createEl("p", {
 			text: "Please limit the token to the minimum permissions needed. For more information. Requirements are Issues, Pull Requests, and Repositories. Read more ",
 		});
@@ -1137,6 +1144,27 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					"github-issues-repo-action",
 				);
 
+				const syncButton = actionContainer.createEl("button", {
+					text: "Sync",
+				});
+				syncButton.addClass("github-issues-sync-button");
+				syncButton.onclick = async (e) => {
+					e.stopPropagation();
+
+					// Disable button and show loading state
+					syncButton.disabled = true;
+					const originalText = syncButton.textContent || "Sync";
+					syncButton.textContent = "Syncing...";
+
+					try {
+						await this.plugin.syncSingleRepository(repo.repository);
+					} finally {
+						// Re-enable button and restore original state
+						syncButton.disabled = false;
+						syncButton.textContent = originalText;
+					}
+				};
+
 				const configButton = actionContainer.createEl("button", {
 					text: "Configure",
 				});
@@ -1186,6 +1214,12 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					if (
 						!(e.target as Element).closest(
 							".github-issues-remove-button",
+						) &&
+						!(e.target as Element).closest(
+							".github-issues-sync-button",
+						) &&
+						!(e.target as Element).closest(
+							".github-issues-config-button",
 						)
 					) {
 						toggleDetails();
@@ -1335,6 +1369,156 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		// Label filtering settings
+		new Setting(issuesSettingsContainer)
+			.setName("Filter issues by labels")
+			.setDesc("Enable filtering issues based on their labels")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.enableLabelFilter ?? false)
+					.onChange(async (value) => {
+						repo.enableLabelFilter = value;
+						labelFilterContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const labelFilterContainer = issuesSettingsContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		labelFilterContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!(repo.enableLabelFilter ?? false),
+		);
+
+		new Setting(labelFilterContainer)
+			.setName("Label filter mode")
+			.setDesc("Choose whether to include or exclude issues with the specified labels")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("include", "Include - Only show issues with these labels")
+					.addOption("exclude", "Exclude - Hide issues with these labels")
+					.setValue(repo.labelFilterMode ?? "include")
+					.onChange(async (value) => {
+						repo.labelFilterMode = value as "include" | "exclude";
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(labelFilterContainer)
+			.setName("Label filters")
+			.setDesc("Comma-separated list of labels to filter by (case-sensitive)")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("bug, enhancement, help wanted")
+					.setValue((repo.labelFilters || []).join(", "))
+					.onChange(async (value) => {
+						repo.labelFilters = value
+							.split(",")
+							.map(label => label.trim())
+							.filter(label => label.length > 0);
+						await this.plugin.saveSettings();
+					});
+
+				return text;
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Fetch available labels")
+					.setTooltip("Load labels from this repository to help with configuration")
+					.onClick(async () => {
+						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
+						if (textArea) {
+							await this.fetchAndShowRepositoryLabels(repo.repository, repo, 'labelFilters', textArea);
+						}
+					}),
+			);
+
+		// Assignee filtering settings for issues
+		new Setting(issuesSettingsContainer)
+			.setName("Filter issues by assignees")
+			.setDesc("Enable filtering issues based on who they are assigned to")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.enableAssigneeFilter ?? false)
+					.onChange(async (value) => {
+						repo.enableAssigneeFilter = value;
+						assigneeFilterContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const assigneeFilterContainer = issuesSettingsContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		assigneeFilterContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!(repo.enableAssigneeFilter ?? false),
+		);
+
+		new Setting(assigneeFilterContainer)
+			.setName("Assignee filter mode")
+			.setDesc("Choose how to filter issues by assignees")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("assigned-to-me", "Assigned to me - Only my issues")
+					.addOption("assigned-to-specific", "Assigned to specific users")
+					.addOption("unassigned", "Unassigned - Issues with no assignee")
+					.addOption("any-assigned", "Any assigned - Issues with any assignee")
+					.setValue(repo.assigneeFilterMode ?? "assigned-to-me")
+					.onChange(async (value) => {
+						repo.assigneeFilterMode = value as "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+						assigneeSpecificContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							value !== "assigned-to-specific",
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const assigneeSpecificContainer = assigneeFilterContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		assigneeSpecificContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			(repo.assigneeFilterMode ?? "assigned-to-me") !== "assigned-to-specific",
+		);
+
+		new Setting(assigneeSpecificContainer)
+			.setName("Specific assignees")
+			.setDesc("Comma-separated list of GitHub usernames to filter by")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("username1, username2, username3")
+					.setValue((repo.assigneeFilters || []).join(", "))
+					.onChange(async (value) => {
+						repo.assigneeFilters = value
+							.split(",")
+							.map(username => username.trim())
+							.filter(username => username.length > 0);
+						await this.plugin.saveSettings();
+					});
+
+				return text;
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Fetch collaborators")
+					.setTooltip("Load collaborators from this repository to help with configuration")
+					.onClick(async () => {
+						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
+						if (textArea) {
+							await this.fetchAndShowRepositoryCollaborators(repo.repository, repo, 'assigneeFilters', textArea);
+						}
+					}),
+			);
+
 		new Setting(issuesSettingsContainer)
 			.setName("Default: Allow issue deletion")
 			.setDesc(
@@ -1422,6 +1606,156 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
+		// Label filtering settings for pull requests
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Filter pull requests by labels")
+			.setDesc("Enable filtering pull requests based on their labels")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.enablePrLabelFilter ?? false)
+					.onChange(async (value) => {
+						repo.enablePrLabelFilter = value;
+						prLabelFilterContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const prLabelFilterContainer = pullRequestsSettingsContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		prLabelFilterContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!(repo.enablePrLabelFilter ?? false),
+		);
+
+		new Setting(prLabelFilterContainer)
+			.setName("PR label filter mode")
+			.setDesc("Choose whether to include or exclude pull requests with the specified labels")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("include", "Include - Only show PRs with these labels")
+					.addOption("exclude", "Exclude - Hide PRs with these labels")
+					.setValue(repo.prLabelFilterMode ?? "include")
+					.onChange(async (value) => {
+						repo.prLabelFilterMode = value as "include" | "exclude";
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(prLabelFilterContainer)
+			.setName("PR label filters")
+			.setDesc("Comma-separated list of labels to filter by (case-sensitive)")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("bug, enhancement, help wanted")
+					.setValue((repo.prLabelFilters || []).join(", "))
+					.onChange(async (value) => {
+						repo.prLabelFilters = value
+							.split(",")
+							.map(label => label.trim())
+							.filter(label => label.length > 0);
+						await this.plugin.saveSettings();
+					});
+
+				return text;
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Fetch available labels")
+					.setTooltip("Load labels from this repository to help with configuration")
+					.onClick(async () => {
+						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
+						if (textArea) {
+							await this.fetchAndShowRepositoryLabels(repo.repository, repo, 'prLabelFilters', textArea);
+						}
+					}),
+			);
+
+		// Assignee filtering settings for pull requests
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Filter pull requests by assignees")
+			.setDesc("Enable filtering pull requests based on who they are assigned to")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(repo.enablePrAssigneeFilter ?? false)
+					.onChange(async (value) => {
+						repo.enablePrAssigneeFilter = value;
+						prAssigneeFilterContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value,
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const prAssigneeFilterContainer = pullRequestsSettingsContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		prAssigneeFilterContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!(repo.enablePrAssigneeFilter ?? false),
+		);
+
+		new Setting(prAssigneeFilterContainer)
+			.setName("PR assignee filter mode")
+			.setDesc("Choose how to filter pull requests by assignees")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("assigned-to-me", "Assigned to me - Only my PRs")
+					.addOption("assigned-to-specific", "Assigned to specific users")
+					.addOption("unassigned", "Unassigned - PRs with no assignee")
+					.addOption("any-assigned", "Any assigned - PRs with any assignee")
+					.setValue(repo.prAssigneeFilterMode ?? "assigned-to-me")
+					.onChange(async (value) => {
+						repo.prAssigneeFilterMode = value as "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+						prAssigneeSpecificContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							value !== "assigned-to-specific",
+						);
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		const prAssigneeSpecificContainer = prAssigneeFilterContainer.createDiv(
+			"github-issues-settings-group github-issues-nested",
+		);
+		prAssigneeSpecificContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			(repo.prAssigneeFilterMode ?? "assigned-to-me") !== "assigned-to-specific",
+		);
+
+		new Setting(prAssigneeSpecificContainer)
+			.setName("Specific PR assignees")
+			.setDesc("Comma-separated list of GitHub usernames to filter by")
+			.addTextArea((text) => {
+				text
+					.setPlaceholder("username1, username2, username3")
+					.setValue((repo.prAssigneeFilters || []).join(", "))
+					.onChange(async (value) => {
+						repo.prAssigneeFilters = value
+							.split(",")
+							.map(username => username.trim())
+							.filter(username => username.length > 0);
+						await this.plugin.saveSettings();
+					});
+
+				return text;
+			})
+			.addButton((button) =>
+				button
+					.setButtonText("Fetch collaborators")
+					.setTooltip("Load collaborators from this repository to help with configuration")
+					.onClick(async () => {
+						const textArea = button.buttonEl.closest('.setting-item')?.querySelector('textarea');
+						if (textArea) {
+							await this.fetchAndShowRepositoryCollaborators(repo.repository, repo, 'prAssigneeFilters', textArea);
+						}
+					}),
+			);
+
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Default: Allow pull request deletion")
 			.setDesc(
@@ -1442,20 +1776,6 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	): Promise<void> {
 		container.empty();
 
-		const loadingContainer = container.createDiv(
-			"github-issues-loading-container",
-		);
-		const loadingSpinner = loadingContainer.createDiv(
-			"github-issues-loading-spinner",
-		);
-		setIcon(loadingSpinner, "loader-2");
-		loadingSpinner.addClass("github-issues-spinner");
-
-		loadingContainer
-			.createEl("p", {
-				text: "Loading repositories from GitHub...",
-			})
-			.addClass("github-issues-loading-text");
 
 		try {
 			const repos = await this.plugin.fetchAvailableRepositories();
@@ -1825,6 +2145,271 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			container.createEl("p", {
 				text: `Error loading repositories: ${(error as Error).message}`,
 			});
+		}
+	}
+
+	/**
+	 * Fetch and display available labels for a repository
+	 */
+	private async fetchAndShowRepositoryLabels(
+		repositoryName: string,
+		repo: RepositoryTracking,
+		filterType: 'labelFilters' | 'prLabelFilters',
+		textAreaElement: HTMLTextAreaElement,
+	): Promise<void> {
+		if (!this.plugin.gitHubClient?.isReady()) {
+			new Notice("GitHub client not ready. Please set your GitHub token first.");
+			return;
+		}
+
+		const [owner, repoName] = repositoryName.split("/");
+		if (!owner || !repoName) {
+			new Notice("Invalid repository format. Expected 'owner/repo'.");
+			return;
+		}
+
+		try {
+			new Notice("Fetching labels from repository...");
+			const labels = await this.plugin.gitHubClient.fetchRepositoryLabels(owner, repoName);
+
+			if (labels.length === 0) {
+				new Notice("No labels found in this repository.");
+				return;
+			}
+
+			// Create a modal to show available labels
+			const modal = new Modal(this.app);
+			modal.titleEl.setText(`Available Labels for ${repositoryName}`);
+			modal.containerEl.addClass("github-issues-modal");
+
+			const contentContainer = modal.contentEl.createDiv("github-issues-labels-modal");
+
+			const description = contentContainer.createEl("p", {
+				text: `Found ${labels.length} labels in this repository. Click on labels to add them to your filter:`,
+			});
+			description.addClass("github-issues-modal-description");
+
+			const labelsContainer = contentContainer.createDiv("github-issues-labels-container");
+
+			labels.forEach((label: any) => {
+				const labelElement = labelsContainer.createDiv("github-issues-label-item");
+
+				const labelBadge = labelElement.createDiv("github-issues-label-badge");
+				labelBadge.setText(label.name);
+
+				// Set color as CSS custom properties instead of direct style assignment
+				labelBadge.style.setProperty('--label-bg-color', `#${label.color}`);
+				labelBadge.style.setProperty('--label-text-color', this.getContrastColor(label.color));
+
+				if (label.description) {
+					const description = labelElement.createDiv("github-issues-label-description");
+					description.setText(label.description);
+				}
+
+				const currentFilters = repo[filterType] ?? [];
+				const isSelected = currentFilters.includes(label.name);
+				labelElement.classList.toggle("github-issues-label-selected", isSelected);
+
+				labelElement.addEventListener("click", async () => {
+					const currentFilters = repo[filterType] ?? [];
+					if (currentFilters.includes(label.name)) {
+						// Remove label
+						repo[filterType] = currentFilters.filter((l: string) => l !== label.name);
+						labelElement.classList.remove("github-issues-label-selected");
+					} else {
+						// Add label
+						repo[filterType] = [...currentFilters, label.name];
+						labelElement.classList.add("github-issues-label-selected");
+					}
+
+					// Update the textarea and save settings
+					textAreaElement.value = repo[filterType].join(", ");
+					await this.plugin.saveSettings();
+				});
+			});
+
+			const buttonContainer = contentContainer.createDiv("github-issues-button-container");
+			const closeButton = buttonContainer.createEl("button", { text: "Close" });
+			closeButton.onclick = () => modal.close();
+
+			modal.open();
+			new Notice(`Loaded ${labels.length} labels from ${repositoryName}`);
+		} catch (error) {
+			new Notice(`Error fetching labels: ${(error as Error).message}`);
+		}
+	}
+
+	/**
+	 * Fetch and display available collaborators for a repository
+	 */
+	private async fetchAndShowRepositoryCollaborators(
+		repositoryName: string,
+		repo: RepositoryTracking,
+		filterType: 'assigneeFilters' | 'prAssigneeFilters',
+		textAreaElement: HTMLTextAreaElement,
+	): Promise<void> {
+		if (!this.plugin.gitHubClient?.isReady()) {
+			new Notice("GitHub client not ready. Please set your GitHub token first.");
+			return;
+		}
+
+		const [owner, repoName] = repositoryName.split("/");
+		if (!owner || !repoName) {
+			new Notice("Invalid repository format. Expected 'owner/repo'.");
+			return;
+		}
+
+		try {
+			new Notice("Fetching collaborators from repository...");
+			const collaborators = await this.plugin.gitHubClient.fetchRepositoryCollaborators(owner, repoName);
+
+			if (collaborators.length === 0) {
+				new Notice("No collaborators found in this repository.");
+				return;
+			}
+
+			// Create a modal to show available collaborators
+			const modal = new Modal(this.app);
+			modal.titleEl.setText(`Available Collaborators for ${repositoryName}`);
+			modal.containerEl.addClass("github-issues-modal");
+
+			const contentContainer = modal.contentEl.createDiv("github-issues-collaborators-modal");
+
+			const description = contentContainer.createEl("p", {
+				text: `Found ${collaborators.length} collaborators in this repository. Click on users to add them to your filter:`,
+			});
+			description.addClass("github-issues-modal-description");
+
+			const collaboratorsContainer = contentContainer.createDiv("github-issues-collaborators-container");
+
+			const currentFilters = repo[filterType] ?? [];
+
+			collaborators.forEach((collaborator: any) => {
+				const collaboratorElement = collaboratorsContainer.createDiv("github-issues-collaborator-item");
+
+				const avatarContainer = collaboratorElement.createDiv("github-issues-collaborator-avatar");
+				if (collaborator.avatar_url) {
+					const avatar = avatarContainer.createEl("img");
+					avatar.src = collaborator.avatar_url;
+					avatar.alt = collaborator.login;
+					avatar.addClass("github-issues-avatar");
+				}
+
+				const infoContainer = collaboratorElement.createDiv("github-issues-collaborator-info");
+
+				const username = infoContainer.createDiv("github-issues-collaborator-username");
+				username.setText(collaborator.login);
+
+				if (collaborator.type) {
+					const type = infoContainer.createDiv("github-issues-collaborator-type");
+					type.setText(collaborator.type);
+				}
+
+				const isSelected = currentFilters.includes(collaborator.login);
+				collaboratorElement.classList.toggle("github-issues-collaborator-selected", isSelected);
+
+				collaboratorElement.addEventListener("click", async () => {
+					if (currentFilters.includes(collaborator.login)) {
+						// Remove collaborator
+						repo[filterType] = currentFilters.filter((username: string) => username !== collaborator.login);
+						collaboratorElement.classList.remove("github-issues-collaborator-selected");
+					} else {
+						// Add collaborator
+						repo[filterType] = [...currentFilters, collaborator.login];
+						collaboratorElement.classList.add("github-issues-collaborator-selected");
+					}
+
+					// Update the textarea and save settings
+					textAreaElement.value = repo[filterType].join(", ");
+					await this.plugin.saveSettings();
+				});
+			});
+
+			const buttonContainer = contentContainer.createDiv("github-issues-button-container");
+			const closeButton = buttonContainer.createEl("button", { text: "Close" });
+			closeButton.onclick = () => modal.close();
+
+			modal.open();
+			new Notice(`Loaded ${collaborators.length} collaborators from ${repositoryName}`);
+		} catch (error) {
+			new Notice(`Error fetching collaborators: ${(error as Error).message}`);
+		}
+	}
+
+	/**
+	 * Calculate contrast color for text based on background color
+	 */
+	private getContrastColor(hexColor: string): string {
+		const r = parseInt(hexColor.substr(0, 2), 16);
+		const g = parseInt(hexColor.substr(2, 2), 16);
+		const b = parseInt(hexColor.substr(4, 2), 16);
+		const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+		return brightness > 128 ? "#000000" : "#ffffff";
+	}
+
+	/**
+	 * Update the token status badge
+	 */
+	private async updateTokenBadge(container?: HTMLElement): Promise<void> {
+		const badgeContainer = container || this.containerEl.querySelector(".github-issues-token-badge-container") as HTMLElement;
+		if (!badgeContainer) return;
+
+		badgeContainer.empty();
+
+		if (!this.plugin.settings.githubToken) {
+			const badge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
+			badge.setText("No token");
+			return;
+		}
+
+		if (!this.plugin.gitHubClient) {
+			const badge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-error");
+			badge.setText("Client not initialized");
+			return;
+		}
+
+		// Show loading state
+		const loadingBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-loading");
+		loadingBadge.setText("Validating token...");
+
+		try {
+			// Initialize client with current token
+			this.plugin.gitHubClient.initializeClient(this.plugin.settings.githubToken);
+
+			// Validate token and get information
+			const [tokenInfo, rateLimit] = await Promise.all([
+				this.plugin.gitHubClient.validateToken(),
+				this.plugin.gitHubClient.getRateLimit()
+			]);
+
+			// Clear loading state
+			badgeContainer.empty();
+
+			if (tokenInfo.valid) {
+				// Valid token badge
+				const validBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-valid");
+				validBadge.setText("✓ Valid token");
+
+				// Scopes badge
+				if (tokenInfo.scopes.length > 0) {
+					const scopesBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-scopes");
+					scopesBadge.setText(`Scopes: ${tokenInfo.scopes.join(", ")}`);
+				}
+
+				// Rate limit badge
+				if (rateLimit) {
+					const rateLimitBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-rate-limit");
+					rateLimitBadge.setText(`Rate Limit: ${rateLimit.remaining}/${rateLimit.limit}`);
+				}
+			} else {
+				const invalidBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-invalid");
+				invalidBadge.setText("✗ Invalid token");
+			}
+		} catch (error) {
+			// Clear loading state and show error
+			badgeContainer.empty();
+			const errorBadge = badgeContainer.createDiv("github-issues-token-badge github-issues-token-badge-error");
+			errorBadge.setText("Error validating token");
 		}
 	}
 }
