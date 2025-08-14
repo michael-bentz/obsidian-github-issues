@@ -175,8 +175,8 @@ export class FileManager {
 
 				const repoCleaned = repoName.replace(/\//g, "-");
 				const ownerCleaned = owner.replace(/\//g, "-");
-				const issueFolder = `${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`;
-				const pullRequestFolder = `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
+				const issueFolder = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+				const pullRequestFolder = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
 
 				await this.cleanupEmptyIssueFolder(
 					repo,
@@ -196,24 +196,41 @@ export class FileManager {
 
 	// ----- Private helper methods -----
 
+	/**
+	 * Get the issue folder path for a repository
+	 */
+	private getIssueFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
+		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+			return repo.customIssueFolder.trim();
+		}
+		return `${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`;
+	}
+
+	/**
+	 * Get the pull request folder path for a repository
+	 */
+	private getPullRequestFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
+		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+			return repo.customPullRequestFolder.trim();
+		}
+		return `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
+	}
+
 	private async cleanupDeletedIssues(
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
 		allIssuesIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const repoFolder = this.app.vault.getAbstractFileByPath(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const issueFolderPath = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+		const repoFolder = this.app.vault.getAbstractFileByPath(issueFolderPath);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(
-							`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/`,
-						) && file.extension === "md",
+						file.path.startsWith(`${issueFolderPath}/`) && file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -263,18 +280,15 @@ export class FileManager {
 		repoCleaned: string,
 		allPullRequestsIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const repoFolder = this.app.vault.getAbstractFileByPath(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const pullRequestFolderPath = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
+		const repoFolder = this.app.vault.getAbstractFileByPath(pullRequestFolderPath);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(
-							`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/`,
-						) && file.extension === "md",
+						file.path.startsWith(`${pullRequestFolderPath}/`) && file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -323,15 +337,20 @@ export class FileManager {
 		issue: any,
 	): Promise<void> {
 		const fileName = `Issue - ${issue.number}.md`;
-		await this.ensureFolderExists(repo.issueFolder);
-		await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
-		await this.ensureFolderExists(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const issueFolderPath = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
 
-		const file = this.app.vault.getAbstractFileByPath(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-		);
+		// Ensure folder structure exists
+		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+			// For custom folders, just ensure the custom path exists
+			await this.ensureFolderExists(repo.customIssueFolder.trim());
+		} else {
+			// For default structure, ensure nested path exists
+			await this.ensureFolderExists(repo.issueFolder);
+			await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
+			await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`);
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);
 
 		const [owner, repoName] = repo.repository.split("/");
 
@@ -407,10 +426,7 @@ export class FileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(
-				`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-				content,
-			);
+			await this.app.vault.create(`${issueFolderPath}/${fileName}`, content);
 			this.noticeManager.debug(`Created issue file for ${issue.number}`);
 		}
 	}
@@ -422,18 +438,20 @@ export class FileManager {
 		pr: any,
 	): Promise<void> {
 		const fileName = `Pull Request - ${pr.number}.md`;
+		const pullRequestFolderPath = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
 
-		await this.ensureFolderExists(repo.pullRequestFolder);
-		await this.ensureFolderExists(
-			`${repo.pullRequestFolder}/${ownerCleaned}`,
-		);
-		await this.ensureFolderExists(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		// Ensure folder structure exists
+		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+			// For custom folders, just ensure the custom path exists
+			await this.ensureFolderExists(repo.customPullRequestFolder.trim());
+		} else {
+			// For default structure, ensure nested path exists
+			await this.ensureFolderExists(repo.pullRequestFolder);
+			await this.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}`);
+			await this.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`);
+		}
 
-		const file = this.app.vault.getAbstractFileByPath(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-		);
+		const file = this.app.vault.getAbstractFileByPath(`${pullRequestFolderPath}/${fileName}`);
 
 		const [owner, repoName] = repo.repository.split("/");
 
@@ -509,10 +527,7 @@ export class FileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(
-				`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-				content,
-			);
+			await this.app.vault.create(`${pullRequestFolderPath}/${fileName}`, content);
 			this.noticeManager.debug(`Created PR file for ${pr.number}`);
 		}
 	}
@@ -643,28 +658,31 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				}
 			}
 
-			if (files.length === 0) {
-				this.noticeManager.info(
-					`Deleting empty folder: ${issueFolder}`,
-				);
-				const folder =
-					this.app.vault.getAbstractFileByPath(issueFolder);
-				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.fileManager.trashFile(folder);
-				}
-			}
-
-			const issueOwnerFolder = this.app.vault.getAbstractFileByPath(
-				`${repo.issueFolder}/${ownerCleaned}`,
-			);
-
-			if (issueOwnerFolder instanceof TFolder) {
-				const files = issueOwnerFolder.children;
+			// Only cleanup nested folder structure if not using custom folder
+			if (!repo.useCustomIssueFolder || !repo.customIssueFolder || !repo.customIssueFolder.trim()) {
 				if (files.length === 0) {
 					this.noticeManager.info(
-						`Deleting empty folder: ${issueOwnerFolder.path}`,
+						`Deleting empty folder: ${issueFolder}`,
 					);
-					await this.app.fileManager.trashFile(issueOwnerFolder);
+					const folder =
+						this.app.vault.getAbstractFileByPath(issueFolder);
+					if (folder instanceof TFolder && folder.children.length === 0) {
+						await this.app.fileManager.trashFile(folder);
+					}
+				}
+
+				const issueOwnerFolder = this.app.vault.getAbstractFileByPath(
+					`${repo.issueFolder}/${ownerCleaned}`,
+				);
+
+				if (issueOwnerFolder instanceof TFolder) {
+					const files = issueOwnerFolder.children;
+					if (files.length === 0) {
+						this.noticeManager.info(
+							`Deleting empty folder: ${issueOwnerFolder.path}`,
+						);
+						await this.app.fileManager.trashFile(issueOwnerFolder);
+					}
 				}
 			}
 		}
@@ -703,38 +721,40 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				}
 			}
 
-			if (files.length === 0) {
-				this.noticeManager.info(
-					`Deleting empty folder: ${pullRequestFolder}`,
-				);
-				const folder =
-					this.app.vault.getAbstractFileByPath(pullRequestFolder);
-				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.fileManager.trashFile(folder);
-				}
-			}
-
-			const pullRequestOwnerFolder = this.app.vault.getAbstractFileByPath(
-				`${repo.pullRequestFolder}/${ownerCleaned}`,
-			);
-
-			if (pullRequestOwnerFolder instanceof TFolder) {
-				const files = pullRequestOwnerFolder.children;
+			// Only cleanup nested folder structure if not using custom folder
+			if (!repo.useCustomPullRequestFolder || !repo.customPullRequestFolder || !repo.customPullRequestFolder.trim()) {
 				if (files.length === 0) {
 					this.noticeManager.info(
-						`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
+						`Deleting empty folder: ${pullRequestFolder}`,
 					);
-					await this.app.fileManager.trashFile(
-						pullRequestOwnerFolder,
-					);
+					const folder =
+						this.app.vault.getAbstractFileByPath(pullRequestFolder);
+					if (folder instanceof TFolder && folder.children.length === 0) {
+						await this.app.fileManager.trashFile(folder);
+					}
+				}
+
+				const pullRequestOwnerFolder = this.app.vault.getAbstractFileByPath(
+					`${repo.pullRequestFolder}/${ownerCleaned}`,
+				);
+
+				if (pullRequestOwnerFolder instanceof TFolder) {
+					const files = pullRequestOwnerFolder.children;
+					if (files.length === 0) {
+						this.noticeManager.info(
+							`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
+						);
+						await this.app.fileManager.trashFile(
+							pullRequestOwnerFolder,
+						);
+					}
 				}
 			}
 		}
 	}
 
-	/**
-	 * Format comments section for issues and pull requests
-	 */
+	// Format comments section for issues and pull requests
+
 	private formatComments(
 		comments: any[],
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
@@ -744,9 +764,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 		}
 
 		comments.sort(
-			(a, b) =>
-				new Date(a.created_at).getTime() -
-				new Date(b.created_at).getTime(),
+			(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
 		);
 
 		let commentSection = "\n## Comments\n\n";

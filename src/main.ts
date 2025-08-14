@@ -255,10 +255,10 @@ export default class GitHubTrackerPlugin extends Plugin {
 		const loadedData = await this.loadData();
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 
-		// Migrate existing repositories to include new label filter properties
-		this.settings.repositories = this.settings.repositories.map(repo =>
-			Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo)
-		);
+		// Migrate existing repositories to include new custom folder properties
+		this.settings.repositories = this.settings.repositories.map(repo => {
+			return Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
+		});
 	}
 
 	async saveSettings() {
