@@ -8,6 +8,18 @@ export interface RepositoryTracking {
 	pullRequestFolder: string;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
+	enableLabelFilter: boolean;
+	labelFilterMode: "include" | "exclude";
+	labelFilters: string[];
+	enablePrLabelFilter: boolean;
+	prLabelFilterMode: "include" | "exclude";
+	prLabelFilters: string[];
+	enableAssigneeFilter: boolean;
+	assigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	assigneeFilters: string[];
+	enablePrAssigneeFilter: boolean;
+	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	prAssigneeFilters: string[];
 	includeIssueComments: boolean;
 	includePullRequestComments: boolean;
 }
@@ -49,6 +61,18 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	pullRequestFolder: "GitHub Pull Requests",
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
+	enableLabelFilter: false,
+	labelFilterMode: "include",
+	labelFilters: [],
+	enablePrLabelFilter: false,
+	prLabelFilterMode: "include",
+	prLabelFilters: [],
+	enableAssigneeFilter: false,
+	assigneeFilterMode: "assigned-to-me",
+	assigneeFilters: [],
+	enablePrAssigneeFilter: false,
+	prAssigneeFilterMode: "assigned-to-me",
+	prAssigneeFilters: [],
 	includeIssueComments: true,
 	includePullRequestComments: true,
 };
