@@ -5,9 +5,62 @@ import {
 	PluginSettingTab,
 	Setting,
 	setIcon,
+	TextComponent,
+	TFolder,
+	AbstractInputSuggest,
+	TAbstractFile,
 } from "obsidian";
 import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING } from "./types";
 import GitHubTrackerPlugin from "./main";
+
+class FolderSuggest extends AbstractInputSuggest<TFolder> {
+	private inputElement: HTMLInputElement;
+
+	constructor(
+		app: App,
+		inputEl: HTMLInputElement,
+	) {
+		super(app, inputEl);
+		this.inputElement = inputEl;
+	}
+
+	getSuggestions(inputStr: string): TFolder[] {
+		const abstractFiles = this.app.vault.getAllLoadedFiles();
+		const folders: TFolder[] = [];
+		const lowerCaseInputStr = inputStr.toLowerCase();
+
+		abstractFiles.forEach((folder: TAbstractFile) => {
+			if (
+				folder instanceof TFolder &&
+				folder.path.toLowerCase().contains(lowerCaseInputStr)
+			) {
+				folders.push(folder);
+			}
+		});
+
+		return folders;
+	}
+
+	renderSuggestion(folder: TFolder, el: HTMLElement): void {
+		el.setText(folder.path);
+	}
+
+	selectSuggestion(folder: TFolder): void {
+		try {
+			if (this.inputElement) {
+				this.inputElement.value = folder.path;
+				// Trigger input event to notify onChange handlers
+				const event = new Event('input', { bubbles: true });
+				this.inputElement.dispatchEvent(event);
+				this.close();
+			} else {
+				console.error('FolderSuggest: Input element is not available');
+			}
+		} catch (error) {
+			console.error('FolderSuggest: Error setting folder value:', error);
+		}
+	}
+}
 
 export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private selectedRepositories: Set<string> = new Set();
@@ -1282,6 +1335,17 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				text: "Configure how issues are tracked and stored",
 			})
 			.addClass("setting-item-description");
+
+		const issuesSettingsContainer = container.createDiv(
+			"github-issues-settings-group",
+		);
+
+		// Container for the standard issues folder setting
+		const standardIssuesFolderContainer = issuesSettingsContainer.createDiv();
+
+		// Container for the custom issues folder setting
+		const customIssuesFolderContainer = issuesSettingsContainer.createDiv();
+
 		new Setting(container)
 			.setName("Track issues")
 			.setDesc("Enable or disable issue tracking for this repository")
@@ -1295,27 +1359,103 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}),
 			);
-
-		const issuesSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
 		issuesSettingsContainer.classList.toggle(
 			"github-issues-settings-hidden",
 			!repo.trackIssues,
 		);
 
-		new Setting(issuesSettingsContainer)
+		// Update container visibility based on custom folder setting
+		const updateContainerVisibility = () => {
+			standardIssuesFolderContainer.classList.toggle(
+				"github-issues-settings-hidden",
+				repo.useCustomIssueFolder,
+			);
+			customIssuesFolderContainer.classList.toggle(
+				"github-issues-settings-hidden",
+				!repo.useCustomIssueFolder,
+			);
+		};
+
+		const issuesFolderSetting = new Setting(standardIssuesFolderContainer)
 			.setName("Issues folder")
 			.setDesc("The folder where issue files will be stored")
-			.addText((text) =>
+			.addText((text) => {
 				text
 					.setPlaceholder("GitHub Issues")
 					.setValue(repo.issueFolder)
 					.onChange(async (value) => {
 						repo.issueFolder = value;
 						await this.plugin.saveSettings();
-					}),
-			);
+					});
+
+				// Add folder suggestion functionality
+				new FolderSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📁")
+					.setTooltip("Browse folders")
+					.onClick(() => {
+						// The folder suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
+
+		new Setting(issuesSettingsContainer)
+			.setName("Use custom folder")
+			.setDesc("Instead of organizing issues by Owner/Repository, place all issues in a custom folder")
+			.addToggle((toggle) => {
+				toggle
+					.setValue(repo.useCustomIssueFolder)
+					.onChange(async (value) => {
+						repo.useCustomIssueFolder = value;
+						updateContainerVisibility();
+						await this.plugin.saveSettings();
+					});
+			});
+
+		// Create the custom folder container first
+		const customIssueFolderContainer = issuesSettingsContainer.createDiv(
+			"github-issues-settings-group",
+		);
+		customIssueFolderContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!repo.useCustomIssueFolder,
+		);
+
+		new Setting(customIssuesFolderContainer)
+			.setName("Custom issues folder")
+			.setDesc("Specific folder path where all issues will be placed (overrides the folder structure)")
+			.addText((text) => {
+				text
+					.setPlaceholder("e.g., Issues, GitHub/All Issues")
+					.setValue(repo.customIssueFolder)
+					.onChange(async (value) => {
+						repo.customIssueFolder = value;
+						await this.plugin.saveSettings();
+					});
+
+				// Add folder suggestion functionality
+				new FolderSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📁")
+					.setTooltip("Browse folders")
+					.onClick(() => {
+						// The folder suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
+
+		// Set initial visibility
+		updateContainerVisibility();
 
 		new Setting(issuesSettingsContainer)
 			.setName("Issue update mode")
@@ -1362,6 +1502,16 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			})
 			.addClass("setting-item-description");
 
+		const pullRequestsSettingsContainer = container.createDiv(
+			"github-issues-settings-group",
+		);
+
+		// Container for the standard pull requests folder setting
+		const standardPRFolderContainer = pullRequestsSettingsContainer.createDiv();
+
+		// Container for the custom pull requests folder setting
+		const customPRFolderContainer = pullRequestsSettingsContainer.createDiv();
+
 		new Setting(container)
 			.setName("Track pull requests")
 			.setDesc(
@@ -1379,27 +1529,91 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
-
-		const pullRequestsSettingsContainer = container.createDiv(
-			"github-issues-settings-group",
-		);
 		pullRequestsSettingsContainer.classList.toggle(
 			"github-issues-settings-hidden",
 			!repo.trackPullRequest,
 		);
 
-		new Setting(pullRequestsSettingsContainer)
+		// Update container visibility based on custom folder setting
+		const updatePRContainerVisibility = () => {
+			standardPRFolderContainer.classList.toggle(
+				"github-issues-settings-hidden",
+				repo.useCustomPullRequestFolder,
+			);
+			customPRFolderContainer.classList.toggle(
+				"github-issues-settings-hidden",
+				!repo.useCustomPullRequestFolder,
+			);
+		};
+
+		const pullRequestsFolderSetting = new Setting(standardPRFolderContainer)
 			.setName("Pull requests folder")
 			.setDesc("The folder where pull request files will be stored")
-			.addText((text) =>
+			.addText((text) => {
 				text
 					.setPlaceholder("GitHub Pull Requests")
 					.setValue(repo.pullRequestFolder)
 					.onChange(async (value) => {
 						repo.pullRequestFolder = value;
 						await this.plugin.saveSettings();
-					}),
-			);
+					});
+
+				// Add folder suggestion functionality
+				new FolderSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📁")
+					.setTooltip("Browse folders")
+					.onClick(() => {
+						// The folder suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Use custom folder")
+			.setDesc("Instead of organizing pull requests by Owner/Repository, place all pull requests in a custom folder")
+			.addToggle((toggle) => {
+				toggle
+					.setValue(repo.useCustomPullRequestFolder)
+					.onChange(async (value) => {
+						repo.useCustomPullRequestFolder = value;
+						updatePRContainerVisibility();
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(customPRFolderContainer)
+			.setName("Custom pull requests folder")
+			.setDesc("Specific folder path where all pull requests will be placed (overrides the folder structure)")
+			.addText((text) => {
+				text
+					.setPlaceholder("e.g., Pull Requests, GitHub/All PRs")
+					.setValue(repo.customPullRequestFolder)
+					.onChange(async (value) => {
+						repo.customPullRequestFolder = value;
+						await this.plugin.saveSettings();
+					});
+
+				// Add folder suggestion functionality
+				new FolderSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📁")
+					.setTooltip("Browse folders")
+					.onClick(() => {
+						// The folder suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
 
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Pull request update mode")
@@ -1435,6 +1649,9 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		// Set initial visibility
+		updatePRContainerVisibility();
 	}
 
 	private async renderAvailableRepositories(

@@ -4,8 +4,12 @@ export interface RepositoryTracking {
 	issueUpdateMode: "none" | "update" | "append";
 	allowDeleteIssue: boolean;
 	issueFolder: string;
+	useCustomIssueFolder: boolean;
+	customIssueFolder: string;
 	trackPullRequest: boolean;
 	pullRequestFolder: string;
+	useCustomPullRequestFolder: boolean;
+	customPullRequestFolder: string;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
 }
@@ -43,8 +47,12 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	issueUpdateMode: "none",
 	allowDeleteIssue: true,
 	issueFolder: "GitHub",
+	useCustomIssueFolder: false,
+	customIssueFolder: "",
 	trackPullRequest: false,
 	pullRequestFolder: "GitHub Pull Requests",
+	useCustomPullRequestFolder: false,
+	customPullRequestFolder: "",
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
 };
