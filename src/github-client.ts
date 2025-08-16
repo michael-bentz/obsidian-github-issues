@@ -4,6 +4,7 @@ import { NoticeManager } from "./notice-manager";
 
 export class GitHubClient {
 	private octokit: Octokit | null = null;
+	private currentUser: string = "";
 
 	constructor(
 		private settings: GitHubTrackerSettings,
@@ -54,7 +55,8 @@ export class GitHubClient {
 
 		try {
 			const response = await this.octokit.rest.users.getAuthenticated();
-			return response.data.login;
+			this.currentUser = response.data.login;
+			return this.currentUser;
 		} catch (error) {
 			this.noticeManager.error(
 				"Error fetching authenticated user",
@@ -62,6 +64,13 @@ export class GitHubClient {
 			);
 			return "";
 		}
+	}
+
+	/**
+	 * Get the currently cached authenticated user
+	 */
+	public getCurrentUser(): string {
+		return this.currentUser;
 	}
 
 	/**
@@ -403,7 +412,158 @@ export class GitHubClient {
 		}
 	}
 
+	/**
+	 * Fetch labels for a repository
+	 */
+	public async fetchRepositoryLabels(
+		owner: string,
+		repo: string,
+	): Promise<any[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			let allLabels: any[] = [];
+			let page = 1;
+			let hasMorePages = true;
+
+			while (hasMorePages) {
+				const response = await this.octokit.rest.issues.listLabelsForRepo({
+					owner,
+					repo,
+					per_page: 100,
+					page,
+				});
+
+				allLabels = [...allLabels, ...response.data];
+				hasMorePages = response.data.length === 100;
+				page++;
+			}
+
+			this.noticeManager.debug(
+				`Fetched ${allLabels.length} labels for ${owner}/${repo}`,
+			);
+			return allLabels;
+		} catch (error) {
+			this.noticeManager.error(
+				`Error fetching labels for ${owner}/${repo}`,
+				error,
+			);
+			return [];
+		}
+	}
+
+	/**
+	 * Fetch repository collaborators/contributors
+	 */
+	public async fetchRepositoryCollaborators(
+		owner: string,
+		repo: string,
+	): Promise<any[]> {
+		if (!this.octokit) {
+			return [];
+		}
+
+		try {
+			let allCollaborators: any[] = [];
+			let page = 1;
+			let hasMorePages = true;
+
+			while (hasMorePages) {
+				const response = await this.octokit.rest.repos.listCollaborators({
+					owner,
+					repo,
+					per_page: 100,
+					page,
+				});
+
+				allCollaborators = [...allCollaborators, ...response.data];
+				hasMorePages = response.data.length === 100;
+				page++;
+			}
+
+			this.noticeManager.debug(
+				`Fetched ${allCollaborators.length} collaborators for ${owner}/${repo}`,
+			);
+			return allCollaborators;
+		} catch (error) {
+			// If collaborators endpoint fails (permissions), try contributors as fallback
+			try {
+				let allContributors: any[] = [];
+				let page = 1;
+				let hasMorePages = true;
+
+				while (hasMorePages) {
+					const response = await this.octokit.rest.repos.listContributors({
+						owner,
+						repo,
+						per_page: 100,
+						page,
+					});
+
+					allContributors = [...allContributors, ...response.data];
+					hasMorePages = response.data.length === 100;
+					page++;
+				}
+
+				this.noticeManager.debug(
+					`Fetched ${allContributors.length} contributors for ${owner}/${repo} (fallback)`,
+				);
+				return allContributors;
+			} catch (fallbackError) {
+				this.noticeManager.error(
+					`Error fetching collaborators/contributors for ${owner}/${repo}`,
+					fallbackError,
+				);
+				return [];
+			}
+		}
+	}
+
+	/**
+	 * Validate the GitHub token and get its scopes
+	 */
+	public async validateToken(): Promise<{ valid: boolean; scopes: string[]; user?: string }> {
+		if (!this.octokit) {
+			return { valid: false, scopes: [] };
+		}
+
+		try {
+			const response = await this.octokit.rest.users.getAuthenticated();
+			const scopes = response.headers['x-oauth-scopes']?.split(', ') || [];
+			return {
+				valid: true,
+				scopes,
+				user: response.data.login
+			};
+		} catch (error) {
+			return { valid: false, scopes: [] };
+		}
+	}
+
+	/**
+	 * Get current rate limit information
+	 */
+	public async getRateLimit(): Promise<{ remaining: number; limit: number; reset: Date } | null> {
+		if (!this.octokit) {
+			return null;
+		}
+
+		try {
+			const response = await this.octokit.rest.rateLimit.get();
+			return {
+				remaining: response.data.rate.remaining,
+				limit: response.data.rate.limit,
+				reset: new Date(response.data.rate.reset * 1000)
+			};
+		} catch (error) {
+			return null;
+		}
+	}
+
 	public dispose(): void {
 		this.octokit = null;
+		this.currentUser = "";
 	}
 }

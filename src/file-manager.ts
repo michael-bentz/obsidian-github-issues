@@ -78,14 +78,93 @@ export class FileManager {
 	}
 
 	public filterIssues(repo: RepositoryTracking, issues: any[]): any[] {
-		return issues;
+		let filteredIssues = issues;
+
+		// Apply label filtering
+		if ((repo.enableLabelFilter ?? false) && (repo.labelFilters?.length ?? 0) > 0) {
+			filteredIssues = this.applyLabelFilter(filteredIssues, repo.labelFilterMode ?? "include", repo.labelFilters ?? []);
+		}
+
+		// Apply assignee filtering
+		if ((repo.enableAssigneeFilter ?? false)) {
+			filteredIssues = this.applyAssigneeFilter(filteredIssues, repo.assigneeFilterMode ?? "assigned-to-me", repo.assigneeFilters ?? []);
+		}
+
+		return filteredIssues;
+	}
+
+	private applyLabelFilter(items: any[], filterMode: "include" | "exclude", labelFilters: string[]): any[] {
+		return items.filter((item) => {
+			if (!item.labels || !Array.isArray(item.labels)) {
+				// If no labels, only include in "exclude" mode (since we're excluding specific labels)
+				return filterMode === "exclude";
+			}
+
+			const itemLabels = item.labels.map((label: any) =>
+				typeof label === 'string' ? label : label.name
+			);
+
+			const hasMatchingLabel = labelFilters.some(filterLabel =>
+				itemLabels.includes(filterLabel)
+			);
+
+			// Include mode: only include items that have at least one of the specified labels
+			// Exclude mode: exclude items that have any of the specified labels
+			return filterMode === "include" ? hasMatchingLabel : !hasMatchingLabel;
+		});
+	}
+
+	private applyAssigneeFilter(items: any[], filterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned", assigneeFilters: string[]): any[] {
+		return items.filter((item) => {
+			const assignees = item.assignees || [];
+			const assigneeUsernames = assignees.map((assignee: any) => assignee.login || assignee);
+
+			switch (filterMode) {
+				case "assigned-to-me":
+					// Get current user from the item's context or use a stored current user
+					const currentUser = this.getCurrentUser();
+					return assigneeUsernames.includes(currentUser);
+
+				case "assigned-to-specific":
+					// Check if any of the specified assignees are assigned
+					return assigneeFilters.some(filterUser => assigneeUsernames.includes(filterUser));
+
+				case "unassigned":
+					// Only include items with no assignees
+					return assigneeUsernames.length === 0;
+
+				case "any-assigned":
+					// Only include items that have at least one assignee
+					return assigneeUsernames.length > 0;
+
+				default:
+					return true;
+			}
+		});
+	}
+
+	private getCurrentUser(): string {
+		// Access the current user from the GitHubClient through the main plugin
+		return this.gitHubClient ? this.gitHubClient.getCurrentUser() : "";
 	}
 
 	public filterPullRequests(
 		repo: RepositoryTracking,
 		pullRequests: any[],
 	): any[] {
-		return pullRequests;
+		let filteredPullRequests = pullRequests;
+
+		// Apply label filtering
+		if ((repo.enablePrLabelFilter ?? false) && (repo.prLabelFilters?.length ?? 0) > 0) {
+			filteredPullRequests = this.applyLabelFilter(filteredPullRequests, repo.prLabelFilterMode ?? "include", repo.prLabelFilters ?? []);
+		}
+
+		// Apply assignee filtering
+		if ((repo.enablePrAssigneeFilter ?? false)) {
+			filteredPullRequests = this.applyAssigneeFilter(filteredPullRequests, repo.prAssigneeFilterMode ?? "assigned-to-me", repo.prAssigneeFilters ?? []);
+		}
+
+		return filteredPullRequests;
 	}
 
 	public async cleanupEmptyFolders(): Promise<void> {
@@ -96,8 +175,8 @@ export class FileManager {
 
 				const repoCleaned = repoName.replace(/\//g, "-");
 				const ownerCleaned = owner.replace(/\//g, "-");
-				const issueFolder = `${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`;
-				const pullRequestFolder = `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
+				const issueFolder = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+				const pullRequestFolder = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
 
 				await this.cleanupEmptyIssueFolder(
 					repo,
@@ -117,24 +196,41 @@ export class FileManager {
 
 	// ----- Private helper methods -----
 
+	/**
+	 * Get the issue folder path for a repository
+	 */
+	private getIssueFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
+		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+			return repo.customIssueFolder.trim();
+		}
+		return `${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`;
+	}
+
+	/**
+	 * Get the pull request folder path for a repository
+	 */
+	private getPullRequestFolderPath(repo: RepositoryTracking, ownerCleaned: string, repoCleaned: string): string {
+		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+			return repo.customPullRequestFolder.trim();
+		}
+		return `${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`;
+	}
+
 	private async cleanupDeletedIssues(
 		repo: RepositoryTracking,
 		ownerCleaned: string,
 		repoCleaned: string,
 		allIssuesIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const repoFolder = this.app.vault.getAbstractFileByPath(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const issueFolderPath = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
+		const repoFolder = this.app.vault.getAbstractFileByPath(issueFolderPath);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(
-							`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/`,
-						) && file.extension === "md",
+						file.path.startsWith(`${issueFolderPath}/`) && file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -184,18 +280,15 @@ export class FileManager {
 		repoCleaned: string,
 		allPullRequestsIncludingRecentlyClosed: any[],
 	): Promise<void> {
-		const repoFolder = this.app.vault.getAbstractFileByPath(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const pullRequestFolderPath = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
+		const repoFolder = this.app.vault.getAbstractFileByPath(pullRequestFolderPath);
 
 		if (repoFolder) {
 			const files = this.app.vault
 				.getFiles()
 				.filter(
 					(file) =>
-						file.path.startsWith(
-							`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/`,
-						) && file.extension === "md",
+						file.path.startsWith(`${pullRequestFolderPath}/`) && file.extension === "md",
 				);
 
 			for (const file of files) {
@@ -244,22 +337,36 @@ export class FileManager {
 		issue: any,
 	): Promise<void> {
 		const fileName = `Issue - ${issue.number}.md`;
-		await this.ensureFolderExists(repo.issueFolder);
-		await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
-		await this.ensureFolderExists(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		const issueFolderPath = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
 
-		const file = this.app.vault.getAbstractFileByPath(
-			`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-		);
+		// Ensure folder structure exists
+		if (repo.useCustomIssueFolder && repo.customIssueFolder && repo.customIssueFolder.trim()) {
+			// For custom folders, just ensure the custom path exists
+			await this.ensureFolderExists(repo.customIssueFolder.trim());
+		} else {
+			// For default structure, ensure nested path exists
+			await this.ensureFolderExists(repo.issueFolder);
+			await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}`);
+			await this.ensureFolderExists(`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}`);
+		}
+
+		const file = this.app.vault.getAbstractFileByPath(`${issueFolderPath}/${fileName}`);
 
 		const [owner, repoName] = repo.repository.split("/");
-		const comments = await this.gitHubClient.fetchIssueComments(
-			owner,
-			repoName,
-			issue.number,
-		);
+
+		// Only fetch comments if they should be included
+		let comments: any[] = [];
+		if (repo.includeIssueComments) {
+			comments = await this.gitHubClient.fetchIssueComments(
+				owner,
+				repoName,
+				issue.number,
+			);
+		} else {
+			this.noticeManager.debug(
+				`Skipping comments for issue ${issue.number}: repository setting disabled`,
+			);
+		}
 
 		let content = this.createIssueContent(issue, repo, comments);
 
@@ -319,10 +426,7 @@ export class FileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(
-				`${repo.issueFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-				content,
-			);
+			await this.app.vault.create(`${issueFolderPath}/${fileName}`, content);
 			this.noticeManager.debug(`Created issue file for ${issue.number}`);
 		}
 	}
@@ -334,25 +438,36 @@ export class FileManager {
 		pr: any,
 	): Promise<void> {
 		const fileName = `Pull Request - ${pr.number}.md`;
+		const pullRequestFolderPath = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
 
-		await this.ensureFolderExists(repo.pullRequestFolder);
-		await this.ensureFolderExists(
-			`${repo.pullRequestFolder}/${ownerCleaned}`,
-		);
-		await this.ensureFolderExists(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`,
-		);
+		// Ensure folder structure exists
+		if (repo.useCustomPullRequestFolder && repo.customPullRequestFolder && repo.customPullRequestFolder.trim()) {
+			// For custom folders, just ensure the custom path exists
+			await this.ensureFolderExists(repo.customPullRequestFolder.trim());
+		} else {
+			// For default structure, ensure nested path exists
+			await this.ensureFolderExists(repo.pullRequestFolder);
+			await this.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}`);
+			await this.ensureFolderExists(`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}`);
+		}
 
-		const file = this.app.vault.getAbstractFileByPath(
-			`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-		);
+		const file = this.app.vault.getAbstractFileByPath(`${pullRequestFolderPath}/${fileName}`);
 
 		const [owner, repoName] = repo.repository.split("/");
-		const comments = await this.gitHubClient.fetchPullRequestComments(
-			owner,
-			repoName,
-			pr.number,
-		);
+
+		// Only fetch comments if they should be included
+		let comments: any[] = [];
+		if (repo.includePullRequestComments) {
+			comments = await this.gitHubClient.fetchPullRequestComments(
+				owner,
+				repoName,
+				pr.number,
+			);
+		} else {
+			this.noticeManager.debug(
+				`Skipping comments for PR ${pr.number}: repository setting disabled`,
+			);
+		}
 
 		let content = this.createPullRequestContent(pr, repo, comments);
 
@@ -412,10 +527,7 @@ export class FileManager {
 				}
 			}
 		} else {
-			await this.app.vault.create(
-				`${repo.pullRequestFolder}/${ownerCleaned}/${repoCleaned}/${fileName}`,
-				content,
-			);
+			await this.app.vault.create(`${pullRequestFolderPath}/${fileName}`, content);
 			this.noticeManager.debug(`Created PR file for ${pr.number}`);
 		}
 	}
@@ -546,28 +658,31 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				}
 			}
 
-			if (files.length === 0) {
-				this.noticeManager.info(
-					`Deleting empty folder: ${issueFolder}`,
-				);
-				const folder =
-					this.app.vault.getAbstractFileByPath(issueFolder);
-				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.fileManager.trashFile(folder);
-				}
-			}
-
-			const issueOwnerFolder = this.app.vault.getAbstractFileByPath(
-				`${repo.issueFolder}/${ownerCleaned}`,
-			);
-
-			if (issueOwnerFolder instanceof TFolder) {
-				const files = issueOwnerFolder.children;
+			// Only cleanup nested folder structure if not using custom folder
+			if (!repo.useCustomIssueFolder || !repo.customIssueFolder || !repo.customIssueFolder.trim()) {
 				if (files.length === 0) {
 					this.noticeManager.info(
-						`Deleting empty folder: ${issueOwnerFolder.path}`,
+						`Deleting empty folder: ${issueFolder}`,
 					);
-					await this.app.fileManager.trashFile(issueOwnerFolder);
+					const folder =
+						this.app.vault.getAbstractFileByPath(issueFolder);
+					if (folder instanceof TFolder && folder.children.length === 0) {
+						await this.app.fileManager.trashFile(folder);
+					}
+				}
+
+				const issueOwnerFolder = this.app.vault.getAbstractFileByPath(
+					`${repo.issueFolder}/${ownerCleaned}`,
+				);
+
+				if (issueOwnerFolder instanceof TFolder) {
+					const files = issueOwnerFolder.children;
+					if (files.length === 0) {
+						this.noticeManager.info(
+							`Deleting empty folder: ${issueOwnerFolder.path}`,
+						);
+						await this.app.fileManager.trashFile(issueOwnerFolder);
+					}
 				}
 			}
 		}
@@ -606,38 +721,40 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 				}
 			}
 
-			if (files.length === 0) {
-				this.noticeManager.info(
-					`Deleting empty folder: ${pullRequestFolder}`,
-				);
-				const folder =
-					this.app.vault.getAbstractFileByPath(pullRequestFolder);
-				if (folder instanceof TFolder && folder.children.length === 0) {
-					await this.app.fileManager.trashFile(folder);
-				}
-			}
-
-			const pullRequestOwnerFolder = this.app.vault.getAbstractFileByPath(
-				`${repo.pullRequestFolder}/${ownerCleaned}`,
-			);
-
-			if (pullRequestOwnerFolder instanceof TFolder) {
-				const files = pullRequestOwnerFolder.children;
+			// Only cleanup nested folder structure if not using custom folder
+			if (!repo.useCustomPullRequestFolder || !repo.customPullRequestFolder || !repo.customPullRequestFolder.trim()) {
 				if (files.length === 0) {
 					this.noticeManager.info(
-						`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
+						`Deleting empty folder: ${pullRequestFolder}`,
 					);
-					await this.app.fileManager.trashFile(
-						pullRequestOwnerFolder,
-					);
+					const folder =
+						this.app.vault.getAbstractFileByPath(pullRequestFolder);
+					if (folder instanceof TFolder && folder.children.length === 0) {
+						await this.app.fileManager.trashFile(folder);
+					}
+				}
+
+				const pullRequestOwnerFolder = this.app.vault.getAbstractFileByPath(
+					`${repo.pullRequestFolder}/${ownerCleaned}`,
+				);
+
+				if (pullRequestOwnerFolder instanceof TFolder) {
+					const files = pullRequestOwnerFolder.children;
+					if (files.length === 0) {
+						this.noticeManager.info(
+							`Deleting empty folder: ${pullRequestOwnerFolder.path}`,
+						);
+						await this.app.fileManager.trashFile(
+							pullRequestOwnerFolder,
+						);
+					}
 				}
 			}
 		}
 	}
 
-	/**
-	 * Format comments section for issues and pull requests
-	 */
+	// Format comments section for issues and pull requests
+
 	private formatComments(
 		comments: any[],
 		escapeMode: "disabled" | "normal" | "strict" | "veryStrict",
@@ -647,9 +764,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 		}
 
 		comments.sort(
-			(a, b) =>
-				new Date(a.created_at).getTime() -
-				new Date(b.created_at).getTime(),
+			(a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
 		);
 
 		let commentSection = "\n## Comments\n\n";

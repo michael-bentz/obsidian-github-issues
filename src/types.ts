@@ -4,10 +4,28 @@ export interface RepositoryTracking {
 	issueUpdateMode: "none" | "update" | "append";
 	allowDeleteIssue: boolean;
 	issueFolder: string;
+	useCustomIssueFolder: boolean;
+	customIssueFolder: string;
 	trackPullRequest: boolean;
 	pullRequestFolder: string;
+	useCustomPullRequestFolder: boolean;
+	customPullRequestFolder: string;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
+	enableLabelFilter: boolean;
+	labelFilterMode: "include" | "exclude";
+	labelFilters: string[];
+	enablePrLabelFilter: boolean;
+	prLabelFilterMode: "include" | "exclude";
+	prLabelFilters: string[];
+	enableAssigneeFilter: boolean;
+	assigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	assigneeFilters: string[];
+	enablePrAssigneeFilter: boolean;
+	prAssigneeFilterMode: "assigned-to-me" | "assigned-to-specific" | "unassigned" | "any-assigned";
+	prAssigneeFilters: string[];
+	includeIssueComments: boolean;
+	includePullRequestComments: boolean;
 }
 
 export interface GitHubTrackerSettings {
@@ -43,8 +61,26 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	issueUpdateMode: "none",
 	allowDeleteIssue: true,
 	issueFolder: "GitHub",
+	useCustomIssueFolder: false,
+	customIssueFolder: "",
 	trackPullRequest: false,
 	pullRequestFolder: "GitHub Pull Requests",
+	useCustomPullRequestFolder: false,
+	customPullRequestFolder: "",
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
+	enableLabelFilter: false,
+	labelFilterMode: "include",
+	labelFilters: [],
+	enablePrLabelFilter: false,
+	prLabelFilterMode: "include",
+	prLabelFilters: [],
+	enableAssigneeFilter: false,
+	assigneeFilterMode: "assigned-to-me",
+	assigneeFilters: [],
+	enablePrAssigneeFilter: false,
+	prAssigneeFilterMode: "assigned-to-me",
+	prAssigneeFilters: [],
+	includeIssueComments: true,
+	includePullRequestComments: true,
 };
