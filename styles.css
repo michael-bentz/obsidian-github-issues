@@ -1165,7 +1165,7 @@ button:disabled {
 	background-color: var(--interactive-normal);
 	border: 1px solid var(--background-modifier-border);
 	font-size: 14px;
-=======
+}
 /* Nested settings styling */
 .github-issues-nested {
 	margin-left: 20px;
@@ -1266,7 +1266,7 @@ button:disabled {
 	cursor: pointer;
 	transition: all 0.2s ease;
 }
-  
+
 .github-issues .setting-item .setting-item-control button[aria-label="Browse folders"]:hover {
 	background-color: var(--interactive-hover);
 	border-color: var(--interactive-accent);
@@ -1297,7 +1297,7 @@ button:disabled {
 	background-color: var(--background-secondary);
 	border-color: var(--background-modifier-border);
 	cursor: not-allowed;
-=======
+}
 .github-issues-collaborator-item:hover {
 	background-color: var(--background-modifier-hover);
 }
