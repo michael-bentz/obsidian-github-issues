@@ -62,6 +62,55 @@ class FolderSuggest extends AbstractInputSuggest<TFolder> {
 	}
 }
 
+class FileSuggest extends AbstractInputSuggest<TAbstractFile> {
+	private inputElement: HTMLInputElement;
+
+	constructor(
+		app: App,
+		inputEl: HTMLInputElement,
+	) {
+		super(app, inputEl);
+		this.inputElement = inputEl;
+	}
+
+	getSuggestions(inputStr: string): TAbstractFile[] {
+		const abstractFiles = this.app.vault.getAllLoadedFiles();
+		const files: TAbstractFile[] = [];
+		const lowerCaseInputStr = inputStr.toLowerCase();
+
+		abstractFiles.forEach((file: TAbstractFile) => {
+			if (
+				file.path.endsWith('.md') &&
+				file.path.toLowerCase().contains(lowerCaseInputStr)
+			) {
+				files.push(file);
+			}
+		});
+
+		return files;
+	}
+
+	renderSuggestion(file: TAbstractFile, el: HTMLElement): void {
+		el.setText(file.path);
+	}
+
+	selectSuggestion(file: TAbstractFile): void {
+		try {
+			if (this.inputElement) {
+				this.inputElement.value = file.path;
+				// Trigger input event to notify onChange handlers
+				const event = new Event('input', { bubbles: true });
+				this.inputElement.dispatchEvent(event);
+				this.close();
+			} else {
+				console.error('FileSuggest: Input element is not available');
+			}
+		} catch (error) {
+			console.error('FileSuggest: Error setting file value:', error);
+		}
+	}
+}
+
 export class GitHubTrackerSettingTab extends PluginSettingTab {
 	private selectedRepositories: Set<string> = new Set();
 
@@ -1674,6 +1723,74 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(issuesSettingsContainer)
+			.setName("Issue note template")
+			.setDesc(
+				"Template for issue note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - Issue {number}\""
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("Issue - {number}")
+					.setValue(repo.issueNoteTemplate || "Issue - {number}")
+					.onChange(async (value) => {
+						repo.issueNoteTemplate = value || "Issue - {number}";
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(issuesSettingsContainer)
+			.setName("Use custom issue content template")
+			.setDesc("Enable custom template file for issue content instead of the default format")
+			.addToggle((toggle) => {
+				toggle
+					.setValue(repo.useCustomIssueContentTemplate)
+					.onChange(async (value) => {
+						repo.useCustomIssueContentTemplate = value;
+						customIssueTemplateContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value
+						);
+						await this.plugin.saveSettings();
+					});
+			});
+
+		// Create the custom template container
+		const customIssueTemplateContainer = issuesSettingsContainer.createDiv(
+			"github-issues-settings-group",
+		);
+		customIssueTemplateContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!repo.useCustomIssueContentTemplate,
+		);
+
+		new Setting(customIssueTemplateContainer)
+			.setName("Issue content template file")
+			.setDesc("Path to a markdown file that will be used as template for issue content. See /templates folder for examples.")
+			.addText((text) => {
+				text
+					.setPlaceholder("templates/default-issue-template.md")
+					.setValue(repo.issueContentTemplate || "")
+					.onChange(async (value) => {
+						repo.issueContentTemplate = value;
+						await this.plugin.saveSettings();
+					});
+
+				// Add file suggestion functionality
+				new FileSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📄")
+					.setTooltip("Browse template files")
+					.onClick(() => {
+						// The file suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
+
+		new Setting(issuesSettingsContainer)
 			.setName("Include issue comments")
 			.setDesc(
 				"If enabled, comments from issues will be included in the generated files",
@@ -1983,6 +2100,74 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 						}
 					}),
 			);
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Pull request note template")
+			.setDesc(
+				"Template for pull request note filenames. Available variables: {title}, {number}, {status}, {author}, {assignee}, {labels}, {repository}, {owner}, {repoName}, {type}, {created}, {updated}. Example: \"{title} - PR {number}\""
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("PR - {number}")
+					.setValue(repo.pullRequestNoteTemplate || "PR - {number}")
+					.onChange(async (value) => {
+						repo.pullRequestNoteTemplate = value || "PR - {number}";
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(pullRequestsSettingsContainer)
+			.setName("Use custom pull request content template")
+			.setDesc("Enable custom template file for pull request content instead of the default format")
+			.addToggle((toggle) => {
+				toggle
+					.setValue(repo.useCustomPullRequestContentTemplate)
+					.onChange(async (value) => {
+						repo.useCustomPullRequestContentTemplate = value;
+						customPRTemplateContainer.classList.toggle(
+							"github-issues-settings-hidden",
+							!value
+						);
+						await this.plugin.saveSettings();
+					});
+			});
+
+		// Create the custom template container
+		const customPRTemplateContainer = pullRequestsSettingsContainer.createDiv(
+			"github-issues-settings-group",
+		);
+		customPRTemplateContainer.classList.toggle(
+			"github-issues-settings-hidden",
+			!repo.useCustomPullRequestContentTemplate,
+		);
+
+		new Setting(customPRTemplateContainer)
+			.setName("Pull request content template file")
+			.setDesc("Path to a markdown file that will be used as template for pull request content. See /templates folder for examples.")
+			.addText((text) => {
+				text
+					.setPlaceholder("templates/default-pr-template.md")
+					.setValue(repo.pullRequestContentTemplate || "")
+					.onChange(async (value) => {
+						repo.pullRequestContentTemplate = value;
+						await this.plugin.saveSettings();
+					});
+
+				// Add file suggestion functionality
+				new FileSuggest(this.app, text.inputEl);
+			})
+			.addButton((button) => {
+				button
+					.setButtonText("📄")
+					.setTooltip("Browse template files")
+					.onClick(() => {
+						// The file suggest will be triggered when user types
+						const inputEl = button.buttonEl.parentElement?.querySelector('input');
+						if (inputEl) {
+							inputEl.focus();
+						}
+					});
+			});
 
 		new Setting(pullRequestsSettingsContainer)
 			.setName("Default: Allow pull request deletion")

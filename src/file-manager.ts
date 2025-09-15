@@ -5,6 +5,14 @@ import { escapeBody } from "./util/escapeUtils";
 import { extractProperties, updateProperties } from "./util/properties";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
+import {
+	processTemplate,
+	createIssueTemplateData,
+	createPullRequestTemplateData,
+	processFilenameTemplate,
+	processContentTemplate,
+	extractNumberFromFilename
+} from "./util/templateUtils";
 
 export class FileManager {
 	constructor(
@@ -13,6 +21,25 @@ export class FileManager {
 		private noticeManager: NoticeManager,
 		private gitHubClient: GitHubClient,
 	) {}
+
+	/**
+	 * Load template content from a file
+	 */
+	private async loadTemplateContent(templatePath: string): Promise<string | null> {
+		if (!templatePath || templatePath.trim() === "") {
+			return null;
+		}
+
+		try {
+			const templateFile = this.app.vault.getAbstractFileByPath(templatePath.trim());
+			if (templateFile instanceof TFile) {
+				return await this.app.vault.read(templateFile);
+			}
+		} catch (error) {
+			this.noticeManager.warning(`Could not load template file: ${templatePath}`);
+		}
+		return null;
+	}
 
 	/**
 	 * Create issue files for a repository
@@ -234,9 +261,15 @@ export class FileManager {
 				);
 
 			for (const file of files) {
-				const fileNumberString = file.name
-					.replace(".md", "")
-					.replace("Issue - ", "");
+				const fileNumberString = extractNumberFromFilename(
+					file.name,
+					repo.issueNoteTemplate || "Issue - {number}"
+				);
+
+				if (!fileNumberString) {
+					// If we can't extract a number, skip this file
+					continue;
+				}
 
 				const correspondingIssue =
 					allIssuesIncludingRecentlyClosed.find(
@@ -292,9 +325,16 @@ export class FileManager {
 				);
 
 			for (const file of files) {
-				const fileNumberString = file.name
-					.replace(".md", "")
-					.replace("Pull Request - ", "");
+				const fileNumberString = extractNumberFromFilename(
+					file.name,
+					repo.pullRequestNoteTemplate || "Pull Request - {number}"
+				);
+
+				if (!fileNumberString) {
+					// If we can't extract a number, skip this file
+					continue;
+				}
+
 				const correspondingPR =
 					allPullRequestsIncludingRecentlyClosed.find(
 						(pr: any) => pr.number.toString() === fileNumberString,
@@ -336,7 +376,14 @@ export class FileManager {
 		repoCleaned: string,
 		issue: any,
 	): Promise<void> {
-		const fileName = `Issue - ${issue.number}.md`;
+		// Generate filename using template
+		const templateData = createIssueTemplateData(issue, repo.repository);
+		const baseFileName = processFilenameTemplate(
+			repo.issueNoteTemplate || "Issue - {number}",
+			templateData,
+			this.settings.dateFormat
+		);
+		const fileName = `${baseFileName}.md`;
 		const issueFolderPath = this.getIssueFolderPath(repo, ownerCleaned, repoCleaned);
 
 		// Ensure folder structure exists
@@ -368,27 +415,16 @@ export class FileManager {
 			);
 		}
 
-		let content = this.createIssueContent(issue, repo, comments);
+		let content = await this.createIssueContent(issue, repo, comments);
 
 		if (file) {
 			if (file instanceof TFile) {
-				// Use Obsidian's MetadataCache to get frontmatter
-				const properties = extractProperties(this.app, file);
-				const updateModeText = properties.updateMode;
-
-				if (!updateModeText) {
-					this.noticeManager.warning(
-						`No valid update mode found for issue ${issue.number}. Using repository setting.`,
-					);
-				}
-
-				const updateMode = updateModeText
-					? updateModeText.toLowerCase().replace('"', "")
-					: repo.issueUpdateMode;
+				// Use current repository updateMode setting (not the old value from file properties)
+				const updateMode = repo.issueUpdateMode;
 
 				if (updateMode === "update") {
 					// Create the complete new content with updated frontmatter
-					const updatedContent = this.createIssueContent(
+					const updatedContent = await this.createIssueContent(
 						issue,
 						repo,
 						comments,
@@ -437,7 +473,14 @@ export class FileManager {
 		repoCleaned: string,
 		pr: any,
 	): Promise<void> {
-		const fileName = `Pull Request - ${pr.number}.md`;
+		// Generate filename using template
+		const templateData = createPullRequestTemplateData(pr, repo.repository);
+		const baseFileName = processFilenameTemplate(
+			repo.pullRequestNoteTemplate || "PR - {number}",
+			templateData,
+			this.settings.dateFormat
+		);
+		const fileName = `${baseFileName}.md`;
 		const pullRequestFolderPath = this.getPullRequestFolderPath(repo, ownerCleaned, repoCleaned);
 
 		// Ensure folder structure exists
@@ -469,27 +512,16 @@ export class FileManager {
 			);
 		}
 
-		let content = this.createPullRequestContent(pr, repo, comments);
+		let content = await this.createPullRequestContent(pr, repo, comments);
 
 		if (file) {
 			if (file instanceof TFile) {
-				// Use Obsidian's MetadataCache to get frontmatter
-				const properties = extractProperties(this.app, file);
-				const updateModeText = properties.updateMode;
-
-				if (!updateModeText) {
-					this.noticeManager.warning(
-						`No valid update mode found for PR ${pr.number}. Using repository setting.`,
-					);
-				}
-
-				const updateMode = updateModeText
-					? updateModeText.toLowerCase().replace('"', "")
-					: repo.pullRequestUpdateMode;
+				// Use current repository updateMode setting (not the old value from file properties)
+				const updateMode = repo.pullRequestUpdateMode;
 
 				if (updateMode === "update") {
 					// Create the complete new content with updated frontmatter
-					const updatedContent = this.createPullRequestContent(
+					const updatedContent = await this.createPullRequestContent(
 						pr,
 						repo,
 						comments,
@@ -540,11 +572,27 @@ export class FileManager {
 		}
 	}
 
-	private createIssueContent(
+	private async createIssueContent(
 		issue: any,
 		repo: RepositoryTracking,
 		comments: any[],
-	): string {
+	): Promise<string> {
+		// Check if custom template is enabled and load template content
+		if (repo.useCustomIssueContentTemplate && repo.issueContentTemplate) {
+			const templateContent = await this.loadTemplateContent(repo.issueContentTemplate);
+			if (templateContent) {
+				const templateData = createIssueTemplateData(
+					issue,
+					repo.repository,
+					comments,
+					this.settings.dateFormat,
+					this.settings.escapeMode
+				);
+				return processContentTemplate(templateContent, templateData, this.settings.dateFormat);
+			}
+		}
+
+		// Fallback to default template
 		return `---
 title: "${escapeBody(issue.title, this.settings.escapeMode)}"
 status: "${issue.state}"
@@ -580,11 +628,27 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 `;
 	}
 
-	private createPullRequestContent(
+	private async createPullRequestContent(
 		pr: any,
 		repo: RepositoryTracking,
 		comments: any[],
-	): string {
+	): Promise<string> {
+		// Check if custom template is enabled and load template content
+		if (repo.useCustomPullRequestContentTemplate && repo.pullRequestContentTemplate) {
+			const templateContent = await this.loadTemplateContent(repo.pullRequestContentTemplate);
+			if (templateContent) {
+				const templateData = createPullRequestTemplateData(
+					pr,
+					repo.repository,
+					comments,
+					this.settings.dateFormat,
+					this.settings.escapeMode
+				);
+				return processContentTemplate(templateContent, templateData, this.settings.dateFormat);
+			}
+		}
+
+		// Fallback to default template
 		return `---
 title: "${escapeBody(pr.title, this.settings.escapeMode)}"
 status: "${pr.state}"
