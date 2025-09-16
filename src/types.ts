@@ -6,10 +6,16 @@ export interface RepositoryTracking {
 	issueFolder: string;
 	useCustomIssueFolder: boolean;
 	customIssueFolder: string;
+	issueNoteTemplate: string;
+	issueContentTemplate: string;
+	useCustomIssueContentTemplate: boolean;
 	trackPullRequest: boolean;
 	pullRequestFolder: string;
 	useCustomPullRequestFolder: boolean;
 	customPullRequestFolder: string;
+	pullRequestNoteTemplate: string;
+	pullRequestContentTemplate: string;
+	useCustomPullRequestContentTemplate: boolean;
 	pullRequestUpdateMode: "none" | "update" | "append";
 	allowDeletePullRequest: boolean;
 	enableLabelFilter: boolean;
@@ -63,10 +69,16 @@ export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	issueFolder: "GitHub",
 	useCustomIssueFolder: false,
 	customIssueFolder: "",
+	issueNoteTemplate: "Issue - {number}",
+	issueContentTemplate: "",
+	useCustomIssueContentTemplate: false,
 	trackPullRequest: false,
 	pullRequestFolder: "GitHub Pull Requests",
 	useCustomPullRequestFolder: false,
 	customPullRequestFolder: "",
+	pullRequestNoteTemplate: "PR - {number}",
+	pullRequestContentTemplate: "",
+	useCustomPullRequestContentTemplate: false,
 	pullRequestUpdateMode: "none",
 	allowDeletePullRequest: true,
 	enableLabelFilter: false,
