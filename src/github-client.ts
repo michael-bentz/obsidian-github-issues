@@ -163,6 +163,8 @@ export class GitHubClient {
 					state,
 					per_page: 100,
 					page,
+					// Include milestone data explicitly
+					sort: 'updated',
 				});
 
 				allItems = [...allItems, ...response.data];
