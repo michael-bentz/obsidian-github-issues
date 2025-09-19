@@ -1,9 +1,15 @@
 /**
  * Utility function for escaping content in different modes
  * @param unsafe The string to escape
- * @param mode The escaping mode: "disabled", "normal", or "strict"
+ * @param mode The escaping mode: "disabled", "normal", "strict", or "veryStrict"
  * @returns The escaped string
  * @throws Error if input is null or undefined
+ *
+ * Modes:
+ * - disabled: No escaping applied
+ * - normal: Basic escaping for Templater and Dataview compatibility
+ * - strict: Remove potentially dangerous HTML/JS characters (preserves Unicode)
+ * - veryStrict: Remove more special characters (preserves Unicode but more restrictive)
  */
 export function escapeBody(
 	unsafe: string,
@@ -18,15 +24,19 @@ export function escapeBody(
 	}
 
 	if (mode === "strict") {
-		// Allow alphanumeric, whitespace, common punctuation, and URL/Markdown specific characters
+		// Allow Unicode characters, whitespace, common punctuation, and URL/Markdown specific characters
+		// Remove potentially dangerous characters while preserving Chinese and other Unicode characters
 		return unsafe
-			.replace(/[^a-zA-Z0-9\s.,()\[\]*+\-:"#!'?&|*>~^\/:?=&%#_]/g, "")
-			.replace(/---/g, "- - -");
+			.replace(/[<>{}$`\\]/g, "")  // Remove potentially dangerous HTML/JS/template characters
+			.replace(/---/g, "- - -");  // Escape YAML frontmatter separators
 	}
 
 	if (mode === "veryStrict") {
-		// Allow alphanumeric, whitespace, basic punctuation, and essential URL/Markdown image characters
-		return unsafe.replace(/[^a-zA-Z0-9\s.,?!\[\]():\/.\-]/g, "");
+		// Allow Unicode characters, whitespace, basic punctuation, and essential URL/Markdown characters
+		// More restrictive than strict mode but still preserves Chinese and other Unicode characters
+		return unsafe
+			.replace(/[<>{}$`\\"'|&*~^]/g, "")  // Remove more potentially dangerous characters
+			.replace(/---/g, "- - -");  // Escape YAML frontmatter separators
 	}
 
 	// normal mode
