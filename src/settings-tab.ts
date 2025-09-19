@@ -285,11 +285,11 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					)
 					.addOption(
 						"strict",
-						"Strict - Only alphanumeric characters and links will be allowed",
+						"Strict - Remove potentially dangerous characters",
 					)
 					.addOption(
 						"veryStrict",
-						"Very strict - Only alphanumeric characters, and punctuation",
+						"Very strict - Remove many special characters",
 					)
 					.setValue(this.plugin.settings.escapeMode)
 					.onChange(async (value) => {
