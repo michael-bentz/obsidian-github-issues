@@ -37,8 +37,9 @@ export default class GitHubTrackerPlugin extends Plugin {
 				"Error syncing issues and pull requests",
 				error,
 			);
+		} finally {
+			this.isSyncing = false;
 		}
-		this.isSyncing = false;
 	}
 
 	async syncSingleRepository(repositoryName: string) {
@@ -161,8 +162,9 @@ export default class GitHubTrackerPlugin extends Plugin {
 				`Error syncing repository ${repositoryName}`,
 				error,
 			);
+		} finally {
+			this.isSyncing = false;
 		}
-		this.isSyncing = false;
 	}
 
 	async onload() {
@@ -324,45 +326,53 @@ export default class GitHubTrackerPlugin extends Plugin {
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
 
-				this.noticeManager.debug(
-					`Fetching issues for ${repo.repository}`,
-				);
-				const allIssuesIncludingRecentlyClosed =
-					await this.gitHubClient.fetchRepositoryIssues(
-						owner,
-						repoName,
-						true,
-						this.settings.cleanupClosedIssuesDays,
+				try {
+					this.noticeManager.debug(
+						`Fetching issues for ${repo.repository}`,
+					);
+					const allIssuesIncludingRecentlyClosed =
+						await this.gitHubClient.fetchRepositoryIssues(
+							owner,
+							repoName,
+							true,
+							this.settings.cleanupClosedIssuesDays,
+						);
+
+					const openIssues = allIssuesIncludingRecentlyClosed.filter(
+						(issue: { state: string }) => issue.state === "open",
 					);
 
-				const openIssues = allIssuesIncludingRecentlyClosed.filter(
-					(issue: { state: string }) => issue.state === "open",
-				);
+					const filteredIssues = this.fileManager.filterIssues(
+						repo,
+						openIssues,
+					);
 
-				const filteredIssues = this.fileManager.filterIssues(
-					repo,
-					openIssues,
-				);
+					this.noticeManager.debug(
+						`Found ${allIssuesIncludingRecentlyClosed.length} total issues (${openIssues.length} open), ${filteredIssues.length} match filters for file creation/update`,
+					);
+					const currentIssueNumbers = new Set(
+						filteredIssues.map((issue: { number: number }) =>
+							issue.number.toString(),
+						),
+					);
 
-				this.noticeManager.debug(
-					`Found ${allIssuesIncludingRecentlyClosed.length} total issues (${openIssues.length} open), ${filteredIssues.length} match filters for file creation/update`,
-				);
-				const currentIssueNumbers = new Set(
-					filteredIssues.map((issue: { number: number }) =>
-						issue.number.toString(),
-					),
-				);
+					await this.fileManager.createIssueFiles(
+						repo,
+						filteredIssues,
+						allIssuesIncludingRecentlyClosed,
+						currentIssueNumbers,
+					);
 
-				await this.fileManager.createIssueFiles(
-					repo,
-					filteredIssues,
-					allIssuesIncludingRecentlyClosed,
-					currentIssueNumbers,
-				);
-
-				this.noticeManager.debug(
-					`Processed ${filteredIssues.length} open issues for ${repo.repository}`,
-				);
+					this.noticeManager.debug(
+						`Processed ${filteredIssues.length} open issues for ${repo.repository}`,
+					);
+				} catch (repoError: unknown) {
+					this.noticeManager.error(
+						`Error processing issues for repository ${repo.repository}`,
+						repoError,
+					);
+					// Continue with next repository
+				}
 			}
 		} catch (error: unknown) {
 			this.noticeManager.error("Error fetching GitHub issues", error);
@@ -387,48 +397,56 @@ export default class GitHubTrackerPlugin extends Plugin {
 				const [owner, repoName] = repo.repository.split("/");
 				if (!owner || !repoName) continue;
 
-				this.noticeManager.debug(
-					`Fetching pull requests for ${repo.repository}`,
-				);
-
-				const allPullRequestsIncludingRecentlyClosed =
-					await this.gitHubClient.fetchRepositoryPullRequests(
-						owner,
-						repoName,
-						true,
-						this.settings.cleanupClosedIssuesDays,
+				try {
+					this.noticeManager.debug(
+						`Fetching pull requests for ${repo.repository}`,
 					);
 
-				const openPullRequests =
-					allPullRequestsIncludingRecentlyClosed.filter(
-						(pr: { state: string }) => pr.state === "open",
+					const allPullRequestsIncludingRecentlyClosed =
+						await this.gitHubClient.fetchRepositoryPullRequests(
+							owner,
+							repoName,
+							true,
+							this.settings.cleanupClosedIssuesDays,
+						);
+
+					const openPullRequests =
+						allPullRequestsIncludingRecentlyClosed.filter(
+							(pr: { state: string }) => pr.state === "open",
+						);
+
+					const filteredPRs = this.fileManager.filterPullRequests(
+						repo,
+						openPullRequests,
 					);
 
-				const filteredPRs = this.fileManager.filterPullRequests(
-					repo,
-					openPullRequests,
-				);
+					this.noticeManager.debug(
+						`Found ${allPullRequestsIncludingRecentlyClosed.length} total pull requests (${openPullRequests.length} open), ${filteredPRs.length} match filters for file creation/update`,
+					);
 
-				this.noticeManager.debug(
-					`Found ${allPullRequestsIncludingRecentlyClosed.length} total pull requests (${openPullRequests.length} open), ${filteredPRs.length} match filters for file creation/update`,
-				);
+					const currentPRNumbers = new Set(
+						filteredPRs.map((pr: { number: number }) =>
+							pr.number.toString(),
+						),
+					);
 
-				const currentPRNumbers = new Set(
-					filteredPRs.map((pr: { number: number }) =>
-						pr.number.toString(),
-					),
-				);
+					await this.fileManager.createPullRequestFiles(
+						repo,
+						filteredPRs,
+						allPullRequestsIncludingRecentlyClosed,
+						currentPRNumbers,
+					);
 
-				await this.fileManager.createPullRequestFiles(
-					repo,
-					filteredPRs,
-					allPullRequestsIncludingRecentlyClosed,
-					currentPRNumbers,
-				);
-
-				this.noticeManager.debug(
-					`Processed ${filteredPRs.length} open pull requests for ${repo.repository}`,
-				);
+					this.noticeManager.debug(
+						`Processed ${filteredPRs.length} open pull requests for ${repo.repository}`,
+					);
+				} catch (repoError: unknown) {
+					this.noticeManager.error(
+						`Error processing pull requests for repository ${repo.repository}`,
+						repoError,
+					);
+					// Continue with next repository
+				}
 			}
 		} catch (error: unknown) {
 			this.noticeManager.error(

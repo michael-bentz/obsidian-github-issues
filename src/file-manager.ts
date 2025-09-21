@@ -567,8 +567,13 @@ export class FileManager {
 	private async ensureFolderExists(path: string): Promise<void> {
 		const folder = this.app.vault.getAbstractFileByPath(path);
 		if (!folder) {
-			await this.app.vault.createFolder(path);
-			this.noticeManager.debug(`Created folder: ${path}`);
+			try {
+				await this.app.vault.createFolder(path);
+				this.noticeManager.debug(`Created folder: ${path}`);
+			} catch (error) {
+				// If creation is failed create again to ensure folder exists
+				await this.app.vault.createFolder(path);
+			}
 		}
 	}
 
