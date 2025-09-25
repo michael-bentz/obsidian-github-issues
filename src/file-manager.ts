@@ -1,7 +1,7 @@
 import { App, TFile, TFolder } from "obsidian";
 import { format } from "date-fns";
 import { GitHubTrackerSettings, RepositoryTracking } from "./types";
-import { escapeBody } from "./util/escapeUtils";
+import { escapeBody, escapeYamlString } from "./util/escapeUtils";
 import { extractProperties, updateProperties } from "./util/properties";
 import { NoticeManager } from "./notice-manager";
 import { GitHubClient } from "./github-client";
@@ -11,8 +11,7 @@ import {
 	createPullRequestTemplateData,
 	processFilenameTemplate,
 	processContentTemplate,
-	extractNumberFromFilename,
-	escapeYamlString
+	extractNumberFromFilename
 } from "./util/templateUtils";
 
 export class FileManager {
