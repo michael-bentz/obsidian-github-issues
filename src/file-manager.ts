@@ -11,7 +11,8 @@ import {
 	createPullRequestTemplateData,
 	processFilenameTemplate,
 	processContentTemplate,
-	extractNumberFromFilename
+	extractNumberFromFilename,
+	escapeYamlString
 } from "./util/templateUtils";
 
 export class FileManager {
@@ -599,7 +600,7 @@ export class FileManager {
 
 		// Fallback to default template
 		return `---
-title: "${escapeBody(issue.title, this.settings.escapeMode)}"
+title: "${escapeYamlString(issue.title)}"
 status: "${issue.state}"
 created: "${
 			this.settings.dateFormat !== ""
@@ -655,7 +656,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 
 		// Fallback to default template
 		return `---
-title: "${escapeBody(pr.title, this.settings.escapeMode)}"
+title: "${escapeYamlString(pr.title)}"
 status: "${pr.state}"
 created: "${
 			this.settings.dateFormat !== ""

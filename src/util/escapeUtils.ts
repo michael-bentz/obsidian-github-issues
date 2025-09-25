@@ -48,3 +48,13 @@ export function escapeBody(
 		.replace(/{{/g, "((")
 		.replace(/}}/g, "))");
 }
+
+/**
+ * Escape a string for use in YAML double-quoted strings
+ * @param str The string to escape
+ * @returns The escaped string
+ */
+export function escapeYamlString(str: string): string {
+	// In YAML double-quoted strings, we need to escape backslashes and double quotes
+	return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}

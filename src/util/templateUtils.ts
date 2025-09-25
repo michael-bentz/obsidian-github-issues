@@ -3,13 +3,14 @@
  */
 
 import { format } from "date-fns";
-import { escapeBody } from "./escapeUtils";
+import { escapeBody , escapeYamlString} from "./escapeUtils";
 
 /**
  * Represents the data available for template replacement
  */
 interface TemplateData {
 	title: string;
+	title_yaml: string;
 	number: number;
 	status: string;
 	author: string;
@@ -128,6 +129,7 @@ export function processTemplate(
 	// Available template variables:
 	const replacements: Record<string, string> = {
 		"{title}": data.title || "Untitled",
+		"{title_yaml}": data.title_yaml || "Untitled",
 		"{number}": data.number.toString(),
 		"{status}": data.status || "unknown",
 		"{state}": data.state || data.status || "unknown",
@@ -300,6 +302,7 @@ export function createIssueTemplateData(
 
 	return {
 		title: issue.title || "Untitled",
+		title_yaml: escapeYamlString(issue.title || "Untitled"),
 		number: issue.number,
 		status: issue.state || "unknown",
 		state: issue.state || "unknown",
@@ -344,6 +347,7 @@ export function createPullRequestTemplateData(
 
 	return {
 		title: pr.title || "Untitled",
+		title_yaml: escapeYamlString(pr.title || "Untitled"),
 		number: pr.number,
 		status: pr.state || "unknown",
 		state: pr.state || "unknown",
@@ -383,6 +387,7 @@ export function getTemplateHelp(): string {
 
 Basic Information:
 • {title} - Issue/PR title
+• {title_yaml} - Issue/PR title (YAML-escaped for use in frontmatter)
 • {number} - Issue/PR number
 • {status} / {state} - Current status (open, closed, etc.)
 • {author} - Username who created the issue/PR
@@ -454,6 +459,7 @@ export function extractNumberFromFilename(filename: string, template: string): s
 	// Replace template variables with regex patterns
 	pattern = pattern.replace(/\\?\{number\}/g, '(\\d+)');
 	pattern = pattern.replace(/\\?\{title\}/g, '.*?');
+	pattern = pattern.replace(/\\?\{title_yaml\}/g, '.*?');
 	pattern = pattern.replace(/\\?\{status\}/g, '\\w+');
 	pattern = pattern.replace(/\\?\{author\}/g, '[^\\s]+');
 	pattern = pattern.replace(/\\?\{assignee\}/g, '[^\\s]*');
