@@ -1,5 +1,5 @@
 ---
-title: "{title}"
+title: "{title_yaml}"
 status: "{status}"
 type: "{type}"
 repository: "{repository}"

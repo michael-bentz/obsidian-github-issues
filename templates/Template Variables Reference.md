@@ -5,6 +5,7 @@
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `{title}` | Issue/PR title | "Fix login bug" |
+| `{title_yaml}` | Issue/PR title (YAML-escaped) | "Fix \"login\" bug" |
 | `{number}` | Issue/PR number | "123" |
 | `{status}` | Current status | "open", "closed" |
 | `{state}` | Synonym for status | "open", "closed" |
