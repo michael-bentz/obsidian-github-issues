@@ -14,6 +14,7 @@ import {
 	extractNumberFromFilename
 } from "./util/templateUtils";
 import { getEffectiveRepoSettings } from "./util/settingsUtils";
+import { extractPersistBlocks, mergePersistBlocks, shouldUpdateContent } from "./util/persistUtils";
 
 export class FileManager {
 	constructor(
@@ -430,12 +431,35 @@ export class FileManager {
 				const updateMode = repo.issueUpdateMode;
 
 				if (updateMode === "update") {
+					// Read existing content first
+					const existingContent = await this.app.vault.read(file);
+
+					// Check if content needs updating based on updated_at field
+					if (!shouldUpdateContent(existingContent, issue.updated_at)) {
+						this.noticeManager.debug(
+							`Skipped update for issue ${issue.number}: no changes detected (updated_at match)`
+						);
+						return;
+					}
+
+					// Extract persist blocks from existing content
+					const persistBlocks = extractPersistBlocks(existingContent);
+
 					// Create the complete new content with updated frontmatter
-					const updatedContent = await this.createIssueContent(
+					let updatedContent = await this.createIssueContent(
 						issue,
 						repo,
 						comments,
 					);
+
+					// Merge persist blocks back into new content
+					if (persistBlocks.size > 0) {
+						updatedContent = mergePersistBlocks(updatedContent, existingContent, persistBlocks);
+						this.noticeManager.debug(
+							`Restored ${persistBlocks.size} persist block(s) for issue ${issue.number}`
+						);
+					}
+
 					await this.app.vault.modify(file, updatedContent);
 					this.noticeManager.debug(`Updated issue ${issue.number}`);
 				} else if (updateMode === "append") {
@@ -527,12 +551,35 @@ export class FileManager {
 				const updateMode = repo.pullRequestUpdateMode;
 
 				if (updateMode === "update") {
+					// Read existing content first
+					const existingContent = await this.app.vault.read(file);
+
+					// Check if content needs updating based on updated_at field
+					if (!shouldUpdateContent(existingContent, pr.updated_at)) {
+						this.noticeManager.debug(
+							`Skipped update for PR ${pr.number}: no changes detected (updated_at match)`
+						);
+						return;
+					}
+
+					// Extract persist blocks from existing content
+					const persistBlocks = extractPersistBlocks(existingContent);
+
 					// Create the complete new content with updated frontmatter
-					const updatedContent = await this.createPullRequestContent(
+					let updatedContent = await this.createPullRequestContent(
 						pr,
 						repo,
 						comments,
 					);
+
+					// Merge persist blocks back into new content
+					if (persistBlocks.size > 0) {
+						updatedContent = mergePersistBlocks(updatedContent, existingContent, persistBlocks);
+						this.noticeManager.debug(
+							`Restored ${persistBlocks.size} persist block(s) for PR ${pr.number}`
+						);
+					}
+
 					await this.app.vault.modify(file, updatedContent);
 					this.noticeManager.debug(`Updated PR ${pr.number}`);
 				} else if (updateMode === "append") {
@@ -619,6 +666,11 @@ created: "${
 				? format(new Date(issue.created_at), this.settings.dateFormat)
 				: new Date(issue.created_at).toLocaleString()
 		}"
+updated: "${
+			this.settings.dateFormat !== ""
+				? format(new Date(issue.updated_at), this.settings.dateFormat)
+				: new Date(issue.updated_at).toLocaleString()
+		}"
 url: "${issue.html_url}"
 opened_by: "${issue.user?.login}"
 assignees: [${(
@@ -674,6 +726,11 @@ created: "${
 			this.settings.dateFormat !== ""
 				? format(new Date(pr.created_at), this.settings.dateFormat)
 				: new Date(pr.created_at).toLocaleString()
+		}"
+updated: "${
+			this.settings.dateFormat !== ""
+				? format(new Date(pr.updated_at), this.settings.dateFormat)
+				: new Date(pr.updated_at).toLocaleString()
 		}"
 url: "${pr.html_url}"
 opened_by: "${pr.user?.login}"
