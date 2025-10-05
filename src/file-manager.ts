@@ -13,6 +13,7 @@ import {
 	processContentTemplate,
 	extractNumberFromFilename
 } from "./util/templateUtils";
+import { getEffectiveRepoSettings } from "./util/settingsUtils";
 
 export class FileManager {
 	constructor(
@@ -50,12 +51,15 @@ export class FileManager {
 		allIssuesIncludingRecentlyClosed: any[],
 		_currentIssueNumbers: Set<string>,
 	): Promise<void> {
-		const [owner, repoName] = repo.repository.split("/");
+		// Apply global defaults to repository settings
+		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings.globalDefaults);
+
+		const [owner, repoName] = effectiveRepo.repository.split("/");
 		if (!owner || !repoName) return;
 		const repoCleaned = repoName.replace(/\//g, "-");
 		const ownerCleaned = owner.replace(/\//g, "-");
 		await this.cleanupDeletedIssues(
-			repo,
+			effectiveRepo,
 			ownerCleaned,
 			repoCleaned,
 			allIssuesIncludingRecentlyClosed,
@@ -64,7 +68,7 @@ export class FileManager {
 		// Create or update issue files for open issues
 		for (const issue of openIssues) {
 			await this.createOrUpdateIssueFile(
-				repo,
+				effectiveRepo,
 				ownerCleaned,
 				repoCleaned,
 				issue,
@@ -81,14 +85,17 @@ export class FileManager {
 		allPullRequestsIncludingRecentlyClosed: any[],
 		_currentPRNumbers: Set<string>,
 	): Promise<void> {
-		const [owner, repoName] = repo.repository.split("/");
+		// Apply global defaults to repository settings
+		const effectiveRepo = getEffectiveRepoSettings(repo, this.settings.globalDefaults);
+
+		const [owner, repoName] = effectiveRepo.repository.split("/");
 		if (!owner || !repoName) return;
 
 		const repoCleaned = repoName.replace(/\//g, "-");
 		const ownerCleaned = owner.replace(/\//g, "-");
 
 		await this.cleanupDeletedPullRequests(
-			repo,
+			effectiveRepo,
 			ownerCleaned,
 			repoCleaned,
 			allPullRequestsIncludingRecentlyClosed,
@@ -96,7 +103,7 @@ export class FileManager {
 
 		for (const pr of openPullRequests) {
 			await this.createOrUpdatePullRequestFile(
-				repo,
+				effectiveRepo,
 				ownerCleaned,
 				repoCleaned,
 				pr,
@@ -565,6 +572,12 @@ export class FileManager {
 	}
 
 	private async ensureFolderExists(path: string): Promise<void> {
+		// Guard against undefined or empty paths
+		if (!path || path.trim() === "") {
+			this.noticeManager.error("Cannot create folder: path is empty or undefined");
+			return;
+		}
+
 		const folder = this.app.vault.getAbstractFileByPath(path);
 		if (!folder) {
 			try {

@@ -12,6 +12,7 @@ import {
 } from "obsidian";
 import { RepositoryTracking, DEFAULT_REPOSITORY_TRACKING } from "./types";
 import GitHubTrackerPlugin from "./main";
+import { getTemplateHelp } from "./util/templateUtils";
 
 class FolderSuggest extends AbstractInputSuggest<TFolder> {
 	private inputElement: HTMLInputElement;
@@ -121,41 +122,124 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		super(app, plugin);
 	}
 
-	display(): void {
+	async display(): Promise<void> {
 		const { containerEl } = this;
 
 		containerEl.empty();
 		containerEl.addClass("github-issues");
 
-		new Setting(containerEl)
+		// Header
+		const headerEl = containerEl.createEl("div", { cls: "github-issues-settings-header" });
+		headerEl.createEl("h2", { text: "GitHub Issues & Pull Requests" });
+
+		const subtitleContainer = headerEl.createDiv({ cls: "github-issues-settings-subtitle" });
+		subtitleContainer.createSpan({ text: "Sync your GitHub issues and pull requests in Obsidian" });
+
+		const linksContainer = subtitleContainer.createDiv({ cls: "github-issues-subtitle-links" });
+
+		const bugLink = linksContainer.createEl("a", {
+			href: "https://github.com/LonoxX/obsidian-github-issues/issues/new",
+			cls: "github-issues-bug-link",
+		});
+		bugLink.setAttribute("target", "_blank");
+		const bugIcon = bugLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(bugIcon, "bug");
+		bugLink.createSpan({ text: "Report Bug" });
+
+		linksContainer.createSpan({ text: " • " });
+
+		const sponsorLink = linksContainer.createEl("a", {
+			href: "https://github.com/sponsors/LonoxX",
+			cls: "github-issues-sponsor-link",
+		});
+		sponsorLink.setAttribute("target", "_blank");
+		const sponsorIcon = sponsorLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(sponsorIcon, "heart");
+		sponsorLink.createSpan({ text: "Support me" });
+
+		linksContainer.createSpan({ text: " • " });
+
+		const kofiLink = linksContainer.createEl("a", {
+			href: "https://ko-fi.com/lonoxx",
+			cls: "github-issues-kofi-link",
+		});
+		kofiLink.setAttribute("target", "_blank");
+		const kofiIcon = kofiLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(kofiIcon, "coffee");
+		kofiLink.createSpan({ text: "Ko-fi" });
+
+		linksContainer.createSpan({ text: " • " });
+
+		const bmcLink = linksContainer.createEl("a", {
+			href: "https://buymeacoffee.com/lonoxx",
+			cls: "github-issues-bmc-link",
+		});
+		bmcLink.setAttribute("target", "_blank");
+		const bmcIcon = bmcLink.createSpan({ cls: "github-issues-link-icon" });
+		setIcon(bmcIcon, "pizza");
+		bmcLink.createSpan({ text: "Buy me a Pizza" });
+
+		// Authentication Section
+		const authContainer = containerEl.createDiv("github-issues-settings-group github-issues-settings-group-compact");
+		new Setting(authContainer).setName("Authentication").setHeading();
+
+		const tokenSetting = new Setting(authContainer)
 			.setName("GitHub token")
-			.setDesc("Your GitHub personal access token")
-			.addText((text) =>
-				text
-					.setPlaceholder("Enter your GitHub token")
-					.setValue(this.plugin.settings.githubToken)
-					.onChange(async (value) => {
-						this.plugin.settings.githubToken = value;
-						await this.plugin.saveSettings();
-						this.updateTokenBadge(); // Update badge when token changes
-					}),
-			);
+			.setDesc("Your GitHub personal access token");
+
+		let isTokenVisible = false;
+		const tokenInput = tokenSetting.addText((text) => {
+			text
+				.setPlaceholder("Enter your GitHub token")
+				.setValue(this.plugin.settings.githubToken)
+				.onChange(async (value) => {
+					this.plugin.settings.githubToken = value;
+					await this.plugin.saveSettings();
+					this.updateTokenBadge(); // Update badge when token changes
+				});
+			text.inputEl.type = "password";
+			return text;
+		});
+
+		tokenSetting.addButton((button) => {
+			button
+				.setIcon("eye")
+				.setTooltip("Show/hide token")
+				.onClick(() => {
+					isTokenVisible = !isTokenVisible;
+					const inputEl = tokenSetting.controlEl.querySelector("input");
+					if (inputEl) {
+						inputEl.type = isTokenVisible ? "text" : "password";
+					}
+					button.setIcon(isTokenVisible ? "eye-off" : "eye");
+				});
+		});
 
 		// Add token status badge
-		const tokenBadgeContainer = containerEl.createDiv("github-issues-token-badge-container");
+		const tokenBadgeContainer = authContainer.createDiv("github-issues-token-badge-container");
 		// Update badge asynchronously without blocking the UI
 		setTimeout(() => this.updateTokenBadge(tokenBadgeContainer), 0);
 
-		const tokenInfo = containerEl.createEl("p", {
-			text: "Please limit the token to the minimum permissions needed. For more information. Requirements are Issues, Pull Requests, and Repositories. Read more ",
+		const tokenInfo = authContainer.createEl("p", {
+			text: "Please limit the token to the minimum permissions needed. Requirements are Issues, Pull Requests, and Repositories. ",
 		});
 		tokenInfo.addClass("github-issues-info-text");
 
-		new Setting(containerEl)
+		const infoLink = tokenInfo.createEl("a", {
+			text: "Learn more",
+		});
+		infoLink.addClass("github-issues-info-link");
+		infoLink.href =
+			"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token";
+		infoLink.target = "_blank";
+
+		// Sync Settings Section
+		const syncContainer = containerEl.createDiv("github-issues-settings-group");
+		new Setting(syncContainer).setName("Sync Settings").setHeading();
+
+		new Setting(syncContainer)
 			.setName("Sync on startup")
-			.setDesc(
-				"Automatically sync issues and pull requests when Obsidian starts",
-			)
+			.setDesc("Automatically sync when Obsidian starts")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.syncOnStartup)
@@ -165,11 +249,9 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl)
+		new Setting(syncContainer)
 			.setName("Enable background sync")
-			.setDesc(
-				"Automatically sync issues and pull requests periodically in the background.",
-			)
+			.setDesc("Automatically sync periodically in the background")
 			.addToggle((toggle) =>
 				toggle
 					.setValue(this.plugin.settings.enableBackgroundSync)
@@ -180,37 +262,10 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl)
-			.setName("Days to keep closed items for cleanup check")
-			.setDesc(
-				"When checking for issues/PRs to delete locally, items closed more recently than this number of days will be considered. Affects cleanup when 'Allow issue/PR deletion' is enabled.",
-			)
-			.addText((text) =>
-				text
-					.setPlaceholder("30")
-					.setValue(
-						this.plugin.settings.cleanupClosedIssuesDays.toString(),
-					)
-					.onChange(async (value) => {
-						let numValue = parseInt(value, 10);
-						if (isNaN(numValue) || numValue < 1) {
-							numValue = 1; // Minimum 1 day
-							this.plugin.showNotice(
-								"Cleanup check for closed items set to minimum 1 day.",
-								"warning",
-							);
-						}
-						this.plugin.settings.cleanupClosedIssuesDays = numValue;
-						await this.plugin.saveSettings();
-					}),
-			);
-
 		if (this.plugin.settings.enableBackgroundSync) {
-			new Setting(containerEl)
-				.setName("Background sync interval (minutes)")
-				.setDesc(
-					"How often to sync in the background. Minimum 5 minutes.",
-				)
+			new Setting(syncContainer)
+				.setName("Background sync interval")
+				.setDesc("How often to sync in the background (minutes, min: 5)")
 				.addText((text) =>
 					text
 						.setPlaceholder("30")
@@ -233,8 +288,31 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				);
 		}
 
-		new Setting(containerEl)
-			.setName("Sync notice mode")
+		new Setting(syncContainer)
+			.setName("Cleanup closed items after (days)")
+			.setDesc("Delete local files for items closed longer than this many days")
+			.addText((text) =>
+				text
+					.setPlaceholder("30")
+					.setValue(
+						this.plugin.settings.cleanupClosedIssuesDays.toString(),
+					)
+					.onChange(async (value) => {
+						let numValue = parseInt(value, 10);
+						if (isNaN(numValue) || numValue < 1) {
+							numValue = 1;
+							this.plugin.showNotice(
+								"Cleanup check for closed items set to minimum 1 day.",
+								"warning",
+							);
+						}
+						this.plugin.settings.cleanupClosedIssuesDays = numValue;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(syncContainer)
+			.setName("Notification level")
 			.setDesc("Control the level of notifications shown during sync")
 			.addDropdown((dropdown) => {
 				dropdown
@@ -253,11 +331,16 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					});
 			});
 
-		new Setting(containerEl)
+		// Advanced Settings Section
+		const advancedContainer = containerEl.createDiv("github-issues-settings-group");
+		new Setting(advancedContainer).setName("Advanced Settings").setHeading();
+
+		// Template variables help
+		this.addTemplateVariablesHelp(advancedContainer, 'issue');
+
+		new Setting(advancedContainer)
 			.setName("Date format")
-			.setDesc(
-				"Format for dates in issue files (e.g., yyyy-MM-dd HH:mm:ss)",
-			)
+			.setDesc("Format for dates in issue files (e.g., yyyy-MM-dd HH:mm:ss)")
 			.addText((text) =>
 				text
 					.setPlaceholder("yyyy-MM-dd HH:mm:ss")
@@ -268,11 +351,9 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		new Setting(containerEl)
+		new Setting(advancedContainer)
 			.setName("Body content escaping")
-			.setDesc(
-				"Choose how to handle Templater, Dataview and other plugin escaping in issue and pull request bodies.",
-			)
+			.setDesc("Security level for handling content from GitHub")
 			.addDropdown((dropdown) =>
 				dropdown
 					.addOption(
@@ -338,37 +419,227 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					}),
 			);
 
-		const infoText = containerEl.createEl("p", {
-			text: "CAUTION: especially if using Plugins that enable script execution. In disabled mode, no escaping will be done. ",
-		});
-		infoText.addClass("github-issues-info-text");
-		infoText.addClass("github-issues-warning-text");
+		const escapingInfo = advancedContainer.createDiv();
+		escapingInfo.addClass("github-issues-info-text");
+		escapingInfo.style.marginTop = "8px";
 
-		const infoText2 = containerEl.createEl("p", {
-			text: "In normal mode '`', '{{', '}}', '<%' and '%>' will be escaped. (This has the side effect of not allowing code blocks to be rendered)",
-		});
-		infoText2.addClass("github-issues-info-text");
+		const escapingDetails = escapingInfo.createEl("details");
+		const escapingSummary = escapingDetails.createEl("summary");
+		escapingSummary.textContent = "Escaping mode details";
+		escapingSummary.style.cursor = "pointer";
+		escapingSummary.style.fontWeight = "500";
 
-		const infoText3 = containerEl.createEl("p", {
-			text: "In strict mode only alphanumeric characters, '.,'()/[]{}*+-:\"' and whitespace will be allowed. This will remove any html like rendering and templating, but persist links",
-		});
-		infoText3.addClass("github-issues-info-text");
+		const escapingContent = escapingDetails.createDiv();
+		escapingContent.style.marginTop = "8px";
+		escapingContent.style.paddingLeft = "12px";
 
-		const infoText4 = containerEl.createEl("p", {
-			text: "In very strict mode only alphanumeric characters, and '.,' or whitespace will be allowed. This will remove any html like rendering and templating.",
-		});
-		infoText4.addClass("github-issues-info-text");
+		const warningP = escapingContent.createEl("p");
+		warningP.textContent = "⚠️ CAUTION: Disabling escaping may allow malicious scripts to execute";
+		warningP.addClass("github-issues-warning-text");
 
-		const infoLink = tokenInfo.createEl("a", {
-			text: "here",
-		});
-		infoLink.addClass("github-issues-info-link");
-		infoLink.href =
-			"https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/creating-a-personal-access-token";
-		infoLink.target = "_blank";
+		escapingContent.createEl("p").textContent = "• Normal: Escapes template syntax like '`', '{{', '}}', '<%', '%>'";
+		escapingContent.createEl("p").textContent = "• Strict: Only allows alphanumeric, '.,'()/[]{}*+-:\"' and whitespace";
+		escapingContent.createEl("p").textContent = "• Very Strict: Only allows alphanumeric, '.,' and whitespace";
 
-		containerEl.createEl("hr");
-		const repoContainer = containerEl.createDiv();
+		// Global Defaults Section
+		const globalDefaultsContainer = containerEl.createDiv("github-issues-settings-group");
+		const globalDefaultsHeader = new Setting(globalDefaultsContainer)
+			.setName("Global Defaults")
+			.setDesc("Default settings applied to all repositories (can be overridden per repository)")
+			.setHeading();
+
+		const globalDefaultsContent = globalDefaultsContainer.createDiv("github-issues-collapsible-content");
+
+		// Add collapse toggle
+		globalDefaultsHeader.addButton((button) => {
+			button.setIcon("chevron-up");
+			button.setClass("github-issues-collapse-toggle");
+			button.onClick(() => {
+				const isCollapsed = globalDefaultsContent.hasClass("github-issues-collapsed");
+				if (isCollapsed) {
+					globalDefaultsContent.removeClass("github-issues-collapsed");
+					button.setIcon("chevron-up");
+				} else {
+					globalDefaultsContent.addClass("github-issues-collapsed");
+					button.setIcon("chevron-down");
+				}
+			});
+		});
+
+
+		// Issues Subsection
+		const issuesGlobalContainer = globalDefaultsContent.createDiv("github-issues-nested");
+		new Setting(issuesGlobalContainer).setName("Issues").setHeading();
+
+		new Setting(issuesGlobalContainer)
+			.setName("Update mode")
+			.setDesc("How to handle updates to existing issue files")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("none", "None - Don't update existing files")
+					.addOption("update", "Update - Replace entire content")
+					.addOption("append", "Append - Add new content")
+					.setValue(this.plugin.settings.globalDefaults.issueUpdateMode)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.issueUpdateMode = value as "none" | "update" | "append";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(issuesGlobalContainer)
+			.setName("Allow deletion")
+			.setDesc("Allow deletion of local issue files when closed on GitHub")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.globalDefaults.allowDeleteIssue)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.allowDeleteIssue = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(issuesGlobalContainer)
+			.setName("Folder")
+			.setDesc("Default folder where issue files will be stored")
+			.addText((text) => {
+				text
+					.setPlaceholder("GitHub")
+					.setValue(this.plugin.settings.globalDefaults.issueFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.issueFolder = value;
+						await this.plugin.saveSettings();
+					});
+				new FolderSuggest(this.app, text.inputEl);
+			});
+
+		new Setting(issuesGlobalContainer)
+			.setName("Filename template")
+			.setDesc("Template for issue filenames")
+			.addText((text) =>
+				text
+					.setPlaceholder("Issue - {number}")
+					.setValue(this.plugin.settings.globalDefaults.issueNoteTemplate)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.issueNoteTemplate = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+
+		new Setting(issuesGlobalContainer)
+			.setName("Content template")
+			.setDesc("Template file for issue content (optional)")
+			.addText((text) => {
+				text
+					.setPlaceholder("")
+					.setValue(this.plugin.settings.globalDefaults.issueContentTemplate)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.issueContentTemplate = value;
+						await this.plugin.saveSettings();
+					});
+				new FileSuggest(this.app, text.inputEl);
+			});
+
+		new Setting(issuesGlobalContainer)
+			.setName("Include comments")
+			.setDesc("Include comments in issue files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.globalDefaults.includeIssueComments)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.includeIssueComments = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Pull Requests Subsection
+		const prGlobalContainer = globalDefaultsContent.createDiv("github-issues-nested");
+		new Setting(prGlobalContainer).setName("Pull Requests").setHeading();
+
+		new Setting(prGlobalContainer)
+			.setName("Update mode")
+			.setDesc("How to handle updates to existing pull request files")
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOption("none", "None - Don't update existing files")
+					.addOption("update", "Update - Replace entire content")
+					.addOption("append", "Append - Add new content")
+					.setValue(this.plugin.settings.globalDefaults.pullRequestUpdateMode)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.pullRequestUpdateMode = value as "none" | "update" | "append";
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(prGlobalContainer)
+			.setName("Allow deletion")
+			.setDesc("Allow deletion of local PR files when closed on GitHub")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.globalDefaults.allowDeletePullRequest)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.allowDeletePullRequest = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		new Setting(prGlobalContainer)
+			.setName("Folder")
+			.setDesc("Default folder where pull request files will be stored")
+			.addText((text) => {
+				text
+					.setPlaceholder("GitHub Pull Requests")
+					.setValue(this.plugin.settings.globalDefaults.pullRequestFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.pullRequestFolder = value;
+						await this.plugin.saveSettings();
+					});
+				new FolderSuggest(this.app, text.inputEl);
+			});
+
+		new Setting(prGlobalContainer)
+			.setName("Filename template")
+			.setDesc("Template for pull request filenames")
+			.addText((text) =>
+				text
+					.setPlaceholder("PR - {number}")
+					.setValue(this.plugin.settings.globalDefaults.pullRequestNoteTemplate)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.pullRequestNoteTemplate = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+
+		new Setting(prGlobalContainer)
+			.setName("Content template")
+			.setDesc("Template file for pull request content (optional)")
+			.addText((text) => {
+				text
+					.setPlaceholder("")
+					.setValue(this.plugin.settings.globalDefaults.pullRequestContentTemplate)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.pullRequestContentTemplate = value;
+						await this.plugin.saveSettings();
+					});
+				new FileSuggest(this.app, text.inputEl);
+			});
+
+		new Setting(prGlobalContainer)
+			.setName("Include comments")
+			.setDesc("Include comments in pull request files")
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.globalDefaults.includePullRequestComments)
+					.onChange(async (value) => {
+						this.plugin.settings.globalDefaults.includePullRequestComments = value;
+						await this.plugin.saveSettings();
+					})
+			);
+
+		// Repositories Section
+		const repoContainer = containerEl.createDiv("github-issues-settings-group");
+		repoContainer.style.marginTop = "30px";
 
 		new Setting(repoContainer).setName("Repositories").setHeading();
 		const repoTabsContainer = repoContainer.createDiv(
@@ -406,12 +677,8 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		const manualAddHeaderContainer = manualAddContainer.createDiv(
 			"github-issues-manual-add-header",
 		);
-		const addRepoIcon = manualAddHeaderContainer.createDiv(
-			"github-issues-repo-add-icon",
-		);
-		setIcon(addRepoIcon, "plus-square");
 
-		const addRepoHeading = manualAddHeaderContainer.createEl("h3", {
+		const addRepoHeading = manualAddHeaderContainer.createEl("h4", {
 			text: "Add Repository Manually",
 		});
 
@@ -585,90 +852,38 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			}
 		});
 
-		const noTrackedRepos = trackedReposContent.createEl("p", {
-			text: "No repositories tracked. Please add a repository to get started.",
+		const loadButtonContainer = availableReposContent.createDiv(
+			"github-issues-load-repos-container",
+		);
+
+		const loadDescription = loadButtonContainer.createEl("p", {
+			text: "Load your GitHub repositories to add them to tracking.",
+			cls: "github-issues-load-description",
 		});
-		noTrackedRepos.addClass("github-issues-no-repos");
-		noTrackedRepos.classList.toggle(
-			"github-issues-hidden",
-			this.plugin.settings.repositories.length > 0,
-		);
 
-		const availableReposSearchContainer = availableReposContent.createDiv(
-			"github-issues-available-search-container",
-		);
-
-		const githubCardContainer =
-			availableReposSearchContainer.createDiv("github-issues-card");
-
-		const cardHeader = githubCardContainer.createDiv(
-			"github-issues-card-header",
-		);
-		// GitHub icon
-		const githubIcon = cardHeader.createDiv("github-issues-github-icon");
-		setIcon(githubIcon, "github");
-
-		const cardTitle = cardHeader.createEl("h3");
-		cardTitle.setText("GitHub Repositories");
-		cardTitle.addClass("github-issues-card-title");
-
-		const cardContent = githubCardContainer.createDiv(
-			"github-issues-card-content",
-		);
-
-		const searchDescription = cardContent.createEl("p", {
-			text: "Connect to GitHub to view and track your available repositories. Your repositories will be loaded directly from your GitHub account.",
-		});
-		searchDescription.addClass("github-issues-card-description");
-
-		const actionContainer = githubCardContainer.createDiv(
-			"github-issues-card-action",
-		);
-
-		const searchButton = actionContainer.createEl("button");
-		searchButton.addClass("github-issues-action-button");
-		// Create icon element for the search button
-		const buttonIcon = searchButton.createEl("span", {
+		const loadButton = loadButtonContainer.createEl("button");
+		loadButton.addClass("github-issues-action-button");
+		const buttonIcon = loadButton.createEl("span", {
 			cls: "github-issues-button-icon",
 		});
-		setIcon(buttonIcon, "refresh-cw");
-		searchButton.createEl("span", { text: "Load GitHub Repositories" });
+		setIcon(buttonIcon, "download");
+		loadButton.createEl("span", { text: "Load Repositories" });
 
 		const reposResultsContainer = availableReposContent.createDiv(
 			"github-issues-repos-results-container",
 		);
 		reposResultsContainer.addClass("github-issues-hidden");
 
-		searchButton.onclick = async () => {
-			const buttonText = searchButton.querySelector("span");
+		loadButton.onclick = async () => {
+			loadButton.disabled = true;
+			const buttonText = loadButton.querySelector("span:last-child");
 			if (buttonText) {
 				buttonText.textContent = "Loading...";
 			}
-			searchButton.setAttribute("disabled", "true");
-			searchButton.addClass("github-issues-loading");
 
 			await this.renderAvailableRepositories(reposResultsContainer);
-			reposResultsContainer.addClass("github-issues-fade-out");
 			reposResultsContainer.removeClass("github-issues-hidden");
-
-			setTimeout(() => {
-				reposResultsContainer.removeClass("github-issues-fade-out");
-				reposResultsContainer.addClass("github-issues-fade-in");
-			}, 10);
-
-			if (buttonText) {
-				buttonText.textContent = "Refresh repositories";
-			}
-
-			const spinnerIcon = searchButton.querySelector(
-				".github-issues-button-spinner",
-			);
-			if (spinnerIcon && spinnerIcon instanceof HTMLElement) {
-				setIcon(spinnerIcon, "refresh-cw");
-			}
-
-			searchButton.removeAttribute("disabled");
-			searchButton.removeClass("github-issues-loading");
+			loadButtonContainer.addClass("github-issues-hidden");
 		};
 
 		this.renderRepositoriesList(trackedReposContent);
@@ -1190,6 +1405,12 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				? "User"
 				: "Organization";
 
+			// Chevron icon for collapse/expand
+			const chevronIcon = ownerHeader.createEl("span", {
+				cls: "github-issues-repo-owner-chevron",
+			});
+			setIcon(chevronIcon, "chevron-right");
+
 			const ownerIcon = ownerHeader.createEl("span", {
 				cls: "github-issues-repo-owner-icon",
 			});
@@ -1206,6 +1427,19 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 			const reposContainer = ownerContainer.createDiv(
 				"github-issues-owner-repos",
 			);
+
+			// Make owner header collapsible
+			ownerHeader.addEventListener("click", (e) => {
+				e.stopPropagation();
+				const isExpanded = ownerContainer.classList.contains("github-issues-owner-expanded");
+				if (isExpanded) {
+					ownerContainer.classList.remove("github-issues-owner-expanded");
+					setIcon(chevronIcon, "chevron-right");
+				} else {
+					ownerContainer.classList.add("github-issues-owner-expanded");
+					setIcon(chevronIcon, "chevron-down");
+				}
+			});
 
 			const sortedRepos = reposByOwner[owner].repos.sort((a, b) => {
 				const aName = a.repository.split("/")[1] || "";
@@ -1295,6 +1529,17 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 					text: "Configure tracking settings for this repository",
 				});
 				description.addClass("github-issues-repo-description");
+
+				// Add "Ignore global defaults" toggle at the top
+				new Setting(detailsContainer)
+					.setName("Ignore global defaults")
+					.setDesc("Use repository-specific settings instead of global defaults")
+					.addToggle((toggle) =>
+						toggle.setValue(repo.ignoreGlobalSettings).onChange(async (value) => {
+							repo.ignoreGlobalSettings = value;
+							await this.plugin.saveSettings();
+						}),
+					);
 
 				const issuesContainer = detailsContainer.createDiv(
 					"github-issues-settings-section",
@@ -2342,6 +2587,13 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				const ownerHeader = ownerContainer.createDiv(
 					"github-issues-repo-owner-header",
 				);
+
+				// Chevron icon for collapse/expand
+				const chevronIcon = ownerHeader.createEl("span", {
+					cls: "github-issues-repo-owner-chevron",
+				});
+				setIcon(chevronIcon, "chevron-right");
+
 				const ownerIcon = ownerHeader.createEl("span", {
 					cls: "github-issues-repo-owner-icon",
 				});
@@ -2360,6 +2612,19 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 				const reposContainer = ownerContainer.createDiv(
 					"github-issues-owner-repos",
 				);
+
+				// Make owner header collapsible
+				ownerHeader.addEventListener("click", (e) => {
+					e.stopPropagation();
+					const isExpanded = ownerContainer.classList.contains("github-issues-owner-expanded");
+					if (isExpanded) {
+						ownerContainer.classList.remove("github-issues-owner-expanded");
+						setIcon(chevronIcon, "chevron-right");
+					} else {
+						ownerContainer.classList.add("github-issues-owner-expanded");
+						setIcon(chevronIcon, "chevron-down");
+					}
+				});
 
 				// Add repository items
 				for (const repo of ownerData.repos) {
@@ -2766,6 +3031,21 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 	/**
 	 * Update the token status badge
 	 */
+	private addTemplateVariablesHelp(container: HTMLElement, type: 'issue' | 'pr'): void {
+		const helpContainer = container.createDiv("github-issues-template-help");
+
+		const details = helpContainer.createEl("details");
+		const summary = details.createEl("summary");
+		summary.textContent = "Available template variables";
+		summary.addClass("github-issues-template-help-summary");
+
+		const variablesContainer = details.createDiv("github-issues-template-variables");
+
+		// Use the getTemplateHelp function and render as pre-formatted text
+		const helpText = variablesContainer.createEl("pre");
+		helpText.textContent = getTemplateHelp();
+	}
+
 	private async updateTokenBadge(container?: HTMLElement): Promise<void> {
 		const badgeContainer = container || this.containerEl.querySelector(".github-issues-token-badge-container") as HTMLElement;
 		if (!badgeContainer) return;

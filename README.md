@@ -14,9 +14,6 @@ The configurations are heavily inspired by https://github.com/schaier-io, includ
 ## 🚀 Installation
 
 ### Via Obsidian Community Plugins
-
-> **Note:** This plugin is not yet available in the Community Plugins list.
-
 1. Open Obsidian settings
 2. Navigate to **Community Plugins**
 3. Click **Browse** and search for "GitHub Issues"

@@ -257,9 +257,19 @@ export default class GitHubTrackerPlugin extends Plugin {
 		const loadedData = await this.loadData();
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData);
 
+		// Ensure globalDefaults exists (migration for existing users)
+		if (!this.settings.globalDefaults) {
+			this.settings.globalDefaults = Object.assign({}, DEFAULT_SETTINGS.globalDefaults);
+		}
+
 		// Migrate existing repositories to include new custom folder properties
+		// Defaults first, then override with saved values
 		this.settings.repositories = this.settings.repositories.map(repo => {
-			return Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
+			const merged = Object.assign({}, DEFAULT_REPOSITORY_TRACKING, repo);
+			// Ensure critical fields are never undefined
+			if (!merged.issueFolder) merged.issueFolder = DEFAULT_REPOSITORY_TRACKING.issueFolder;
+			if (!merged.pullRequestFolder) merged.pullRequestFolder = DEFAULT_REPOSITORY_TRACKING.pullRequestFolder;
+			return merged;
 		});
 	}
 
