@@ -431,8 +431,8 @@ Additional Info:
 
 Conditional Blocks:
 • {variable:content} - Shows content only if variable has a value
-• Example: {closed:- **Closed:** {closed}} - Shows "- **Closed:** [date]" only if issue is closed
-• Example: {milestone:📌 Milestone: {milestone}} - Shows milestone info only if milestone exists
+• Example: {closed:- **Closed:** {closed}} - Shows "- **Closed:** [date]"
+• Example: {milestone:📌 Milestone: {milestone}} - Shows milestone info
 
 Examples:
 • "{title} - Issue {number}" → "Bug fix - Issue 123"

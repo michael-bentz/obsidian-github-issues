@@ -1,5 +1,6 @@
 export interface RepositoryTracking {
 	repository: string;
+	ignoreGlobalSettings: boolean; // If true, use only repository-specific settings
 	trackIssues: boolean;
 	issueUpdateMode: "none" | "update" | "append";
 	allowDeleteIssue: boolean;
@@ -34,6 +35,21 @@ export interface RepositoryTracking {
 	includePullRequestComments: boolean;
 }
 
+export interface GlobalDefaults {
+	issueUpdateMode: "none" | "update" | "append";
+	allowDeleteIssue: boolean;
+	issueFolder: string;
+	issueNoteTemplate: string;
+	issueContentTemplate: string;
+	includeIssueComments: boolean;
+	pullRequestUpdateMode: "none" | "update" | "append";
+	allowDeletePullRequest: boolean;
+	pullRequestFolder: string;
+	pullRequestNoteTemplate: string;
+	pullRequestContentTemplate: string;
+	includePullRequestComments: boolean;
+}
+
 export interface GitHubTrackerSettings {
 	githubToken: string;
 	repositories: RepositoryTracking[];
@@ -45,7 +61,23 @@ export interface GitHubTrackerSettings {
 	enableBackgroundSync: boolean;
 	backgroundSyncInterval: number; // in minutes
 	cleanupClosedIssuesDays: number;
+	globalDefaults: GlobalDefaults;
 }
+
+export const DEFAULT_GLOBAL_DEFAULTS: GlobalDefaults = {
+	issueUpdateMode: "none",
+	allowDeleteIssue: true,
+	issueFolder: "GitHub",
+	issueNoteTemplate: "Issue - {number}",
+	issueContentTemplate: "",
+	includeIssueComments: true,
+	pullRequestUpdateMode: "none",
+	allowDeletePullRequest: true,
+	pullRequestFolder: "GitHub Pull Requests",
+	pullRequestNoteTemplate: "PR - {number}",
+	pullRequestContentTemplate: "",
+	includePullRequestComments: true,
+};
 
 export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	githubToken: "",
@@ -58,11 +90,13 @@ export const DEFAULT_SETTINGS: GitHubTrackerSettings = {
 	enableBackgroundSync: false,
 	backgroundSyncInterval: 30,
 	cleanupClosedIssuesDays: 30,
+	globalDefaults: DEFAULT_GLOBAL_DEFAULTS,
 };
 
 // Default repository tracking settings
 export const DEFAULT_REPOSITORY_TRACKING: RepositoryTracking = {
 	repository: "",
+	ignoreGlobalSettings: false,
 	trackIssues: true,
 	issueUpdateMode: "none",
 	allowDeleteIssue: true,
