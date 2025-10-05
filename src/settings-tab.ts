@@ -338,6 +338,9 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		// Template variables help
 		this.addTemplateVariablesHelp(advancedContainer, 'issue');
 
+		// Persist blocks help
+		this.addPersistBlocksHelp(advancedContainer);
+
 		new Setting(advancedContainer)
 			.setName("Date format")
 			.setDesc("Format for dates in issue files (e.g., yyyy-MM-dd HH:mm:ss)")
@@ -3045,6 +3048,60 @@ export class GitHubTrackerSettingTab extends PluginSettingTab {
 		const helpText = variablesContainer.createEl("pre");
 		helpText.textContent = getTemplateHelp();
 	}
+
+	private addPersistBlocksHelp(container: HTMLElement): void {
+		const helpContainer = container.createDiv("github-issues-template-help");
+
+		const details = helpContainer.createEl("details");
+		const summary = details.createEl("summary");
+		summary.textContent = "Protect your custom notes with Persist Blocks";
+		summary.addClass("github-issues-template-help-summary");
+
+		const contentContainer = details.createDiv("github-issues-template-variables");
+
+		// Introduction
+		const intro = contentContainer.createEl("p");
+		intro.innerHTML = `<strong>Persist blocks</strong> allow you to add your own custom notes to GitHub issue and PR files without them being overwritten during sync.`;
+
+		// Basic usage
+		const usageTitle = contentContainer.createEl("h4");
+		usageTitle.textContent = "Basic Usage";
+
+		const usageExample = contentContainer.createEl("pre");
+		usageExample.textContent = `{% persist "notes" %}
+## My Notes
+- Your custom content here
+- Will never be overwritten!
+{% endpersist %}`;
+
+		// How it works
+		const howTitle = contentContainer.createEl("h4");
+		howTitle.textContent = "How It Works";
+
+		const howList = contentContainer.createEl("ul");
+		howList.innerHTML = `
+			<li><strong>Smart Updates:</strong> Files are only updated if GitHub data has changed (checks the <code>updated</code> field)</li>
+			<li><strong>Content Protection:</strong> Everything inside persist blocks is preserved during sync</li>
+			<li><strong>Position Preservation:</strong> Blocks stay exactly where you placed them using surrounding text as anchors</li>
+		`;
+
+		// Multiple blocks
+		const multipleTitle = contentContainer.createEl("h4");
+		multipleTitle.textContent = "Multiple Blocks";
+
+		const multipleDesc = contentContainer.createEl("p");
+		multipleDesc.textContent = "You can have multiple persist blocks in one file. Each needs a unique name:";
+
+		const multipleExample = contentContainer.createEl("pre");
+		multipleExample.textContent = `{% persist "notes" %}
+Your notes here...
+{% endpersist %}
+
+{% persist "todos" %}
+- [ ] Task 1
+- [ ] Task 2
+{% endpersist %}`;
+}
 
 	private async updateTokenBadge(container?: HTMLElement): Promise<void> {
 		const badgeContainer = container || this.containerEl.querySelector(".github-issues-token-badge-container") as HTMLElement;
