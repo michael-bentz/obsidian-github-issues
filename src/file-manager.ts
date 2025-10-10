@@ -269,13 +269,25 @@ export class FileManager {
 				);
 
 			for (const file of files) {
-				const fileNumberString = extractNumberFromFilename(
-					file.name,
-					repo.issueNoteTemplate || "Issue - {number}"
-				);
+				// Try to get number from frontmatter first (most reliable)
+				const properties = extractProperties(this.app, file);
+				let fileNumberString: string | null = null;
+
+				if (properties.number) {
+					fileNumberString = properties.number.toString();
+				} else {
+					// Fallback: try to extract from filename
+					fileNumberString = extractNumberFromFilename(
+						file.name,
+						repo.issueNoteTemplate || "Issue - {number}"
+					);
+				}
 
 				if (!fileNumberString) {
-					// If we can't extract a number, skip this file
+					// If we can't determine the issue number, log a warning but skip
+					this.noticeManager.debug(
+						`Could not determine issue number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`
+					);
 					continue;
 				}
 
@@ -289,17 +301,22 @@ export class FileManager {
 				let deleteReason = "";
 
 				if (correspondingIssue) {
-					if (correspondingIssue.state === "closed") {
-						shouldDelete = true;
-						deleteReason = `Deleted closed issue ${fileNumberString} from ${repo.repository}`;
+					if (correspondingIssue.state === "closed" && correspondingIssue.closed_at) {
+						// Check if issue has been closed longer than the configured days
+						const closedDate = new Date(correspondingIssue.closed_at);
+						const cutoffDate = new Date();
+						cutoffDate.setDate(cutoffDate.getDate() - this.settings.cleanupClosedIssuesDays);
+
+						if (closedDate < cutoffDate) {
+							shouldDelete = true;
+							const daysClosed = Math.floor((Date.now() - closedDate.getTime()) / (1000 * 60 * 60 * 24));
+							deleteReason = `Deleted issue ${fileNumberString} from ${repo.repository} (closed ${daysClosed} days ago, threshold: ${this.settings.cleanupClosedIssuesDays} days)`;
+						}
 					}
 				} else {
 					shouldDelete = true;
-					deleteReason = `Deleted issue ${fileNumberString} from ${repo.repository} as it's no longer tracked (closed > 30 days or deleted)`;
-				}
-
-				if (shouldDelete) {
-					const properties = extractProperties(this.app, file);
+					deleteReason = `Deleted issue ${fileNumberString} from ${repo.repository} as it's no longer tracked (closed > ${this.settings.cleanupClosedIssuesDays} days or deleted)`;
+				}				if (shouldDelete) {
 					const allowDelete = properties.allowDelete
 					? String(properties.allowDelete)
 							.toLowerCase()
@@ -333,13 +350,25 @@ export class FileManager {
 				);
 
 			for (const file of files) {
-				const fileNumberString = extractNumberFromFilename(
-					file.name,
-					repo.pullRequestNoteTemplate || "Pull Request - {number}"
-				);
+				// Try to get number from frontmatter first (most reliable)
+				const properties = extractProperties(this.app, file);
+				let fileNumberString: string | null = null;
+
+				if (properties.number) {
+					fileNumberString = properties.number.toString();
+				} else {
+					// Fallback: try to extract from filename
+					fileNumberString = extractNumberFromFilename(
+						file.name,
+						repo.pullRequestNoteTemplate || "Pull Request - {number}"
+					);
+				}
 
 				if (!fileNumberString) {
-					// If we can't extract a number, skip this file
+					// If we can't determine the PR number, log a warning but skip
+					this.noticeManager.debug(
+						`Could not determine PR number for file: ${file.name}. Consider adding a 'number' property to the frontmatter.`
+					);
 					continue;
 				}
 
@@ -352,17 +381,22 @@ export class FileManager {
 				let deleteReason = "";
 
 				if (correspondingPR) {
-					if (correspondingPR.state === "closed") {
-						shouldDelete = true;
-						deleteReason = `Deleted closed pull request ${fileNumberString} from ${repo.repository}`;
+					if (correspondingPR.state === "closed" && correspondingPR.closed_at) {
+						// Check if PR has been closed longer than the configured days
+						const closedDate = new Date(correspondingPR.closed_at);
+						const cutoffDate = new Date();
+						cutoffDate.setDate(cutoffDate.getDate() - this.settings.cleanupClosedIssuesDays);
+
+						if (closedDate < cutoffDate) {
+							shouldDelete = true;
+							const daysClosed = Math.floor((Date.now() - closedDate.getTime()) / (1000 * 60 * 60 * 24));
+							deleteReason = `Deleted pull request ${fileNumberString} from ${repo.repository} (closed ${daysClosed} days ago, threshold: ${this.settings.cleanupClosedIssuesDays} days)`;
+						}
 					}
 				} else {
 					shouldDelete = true;
-					deleteReason = `Deleted pull request ${fileNumberString} from ${repo.repository} as it's no longer tracked (closed > 30 days or deleted)`;
-				}
-
-				if (shouldDelete) {
-					const properties = extractProperties(this.app, file);
+					deleteReason = `Deleted pull request ${fileNumberString} from ${repo.repository} as it's no longer tracked (closed > ${this.settings.cleanupClosedIssuesDays} days or deleted)`;
+				}			if (shouldDelete) {
 					const allowDelete = properties.allowDelete
 					? String(properties.allowDelete)
 							.toLowerCase()
@@ -660,6 +694,7 @@ export class FileManager {
 		// Fallback to default template
 		return `---
 title: "${escapeYamlString(issue.title)}"
+number: ${issue.number}
 status: "${issue.state}"
 created: "${
 			this.settings.dateFormat !== ""
@@ -721,6 +756,7 @@ ${this.formatComments(comments, this.settings.escapeMode)}
 		// Fallback to default template
 		return `---
 title: "${escapeYamlString(pr.title)}"
+number: ${pr.number}
 status: "${pr.state}"
 created: "${
 			this.settings.dateFormat !== ""
