@@ -452,38 +452,62 @@ export function extractNumberFromFilename(filename: string, template: string): s
 	// Remove .md extension if present
 	const baseFilename = filename.replace(/\.md$/, '');
 
-	// Create a regex pattern from the template
-	// Replace {number} with a capture group and escape other special regex characters
-	let pattern = escapeRegExp(template);
+	// First, try a simple approach: if the template is just "{number}", extract any number
+	if (template === "{number}") {
+		const match = baseFilename.match(/^(\d+)$/);
+		return match ? match[1] : null;
+	}
 
-	// Replace template variables with regex patterns
-	pattern = pattern.replace(/\\?\{number\}/g, '(\\d+)');
-	pattern = pattern.replace(/\\?\{title\}/g, '.*?');
-	pattern = pattern.replace(/\\?\{title_yaml\}/g, '.*?');
-	pattern = pattern.replace(/\\?\{status\}/g, '\\w+');
-	pattern = pattern.replace(/\\?\{author\}/g, '[^\\s]+');
-	pattern = pattern.replace(/\\?\{assignee\}/g, '[^\\s]*');
-	pattern = pattern.replace(/\\?\{repository\}/g, '[^\\s]+');
-	pattern = pattern.replace(/\\?\{owner\}/g, '[^\\s]+');
-	pattern = pattern.replace(/\\?\{repoName\}/g, '[^\\s]+');
-	pattern = pattern.replace(/\\?\{type\}/g, '\\w+');
-	pattern = pattern.replace(/\\?\{state\}/g, '\\w+');
-	pattern = pattern.replace(/\\?\{milestone\}/g, '[^\\s]*');
+	// Create a regex pattern from the template by replacing variables BEFORE escaping
+	let pattern = template;
 
-	// Handle date patterns
-	pattern = pattern.replace(/\\?\{created(?::[^}]+)?\}/g, '[\\d\\-T:Z\\s]+');
-	pattern = pattern.replace(/\\?\{updated(?::[^}]+)?\}/g, '[\\d\\-T:Z\\s]+');
-	pattern = pattern.replace(/\\?\{closed(?::[^}]+)?\}/g, '[\\d\\-T:Z\\s]*');
+	// Replace template variables with regex patterns (before escaping special chars)
+	// {number} is the only one we want to capture
+	pattern = pattern.replace(/\{number\}/g, '<<<NUMBER>>>');
 
-	// Handle array patterns (labels, assignees)
-	pattern = pattern.replace(/\\?\{labels(?::[^}]+)?\}/g, '.*?');
-	pattern = pattern.replace(/\\?\{assignees(?::[^}]+)?\}/g, '.*?');
+	// Replace other variables with patterns that match their likely content
+	// {title} and {title_yaml} can contain almost anything except file-system forbidden chars
+	pattern = pattern.replace(/\{title\}/g, '<<<TITLE>>>');
+	pattern = pattern.replace(/\{title_yaml\}/g, '<<<TITLE>>>');
 
-	// Handle conditional blocks {condition:content}
-	pattern = pattern.replace(/\\?\{\w+:.*?\}/g, '.*?');
+	// Simple word-based patterns
+	pattern = pattern.replace(/\{status\}/g, '<<<WORD>>>');
+	pattern = pattern.replace(/\{type\}/g, '<<<WORD>>>');
+	pattern = pattern.replace(/\{state\}/g, '<<<WORD>>>');
 
-	// Handle remaining unmatched variables as generic matches
-	pattern = pattern.replace(/\\?\{[^}]+\}/g, '.*?');
+	// Username/repo patterns (no spaces)
+	pattern = pattern.replace(/\{author\}/g, '<<<NOSPACE>>>');
+	pattern = pattern.replace(/\{assignee\}/g, '<<<OPTIONAL_NOSPACE>>>');
+	pattern = pattern.replace(/\{repository\}/g, '<<<NOSPACE>>>');
+	pattern = pattern.replace(/\{owner\}/g, '<<<NOSPACE>>>');
+	pattern = pattern.replace(/\{repoName\}/g, '<<<NOSPACE>>>');
+	pattern = pattern.replace(/\{milestone\}/g, '<<<OPTIONAL_NOSPACE>>>');
+
+	// Date patterns
+	pattern = pattern.replace(/\{created(?::[^}]+)?\}/g, '<<<DATE>>>');
+	pattern = pattern.replace(/\{updated(?::[^}]+)?\}/g, '<<<DATE>>>');
+	pattern = pattern.replace(/\{closed(?::[^}]+)?\}/g, '<<<OPTIONAL_DATE>>>');
+
+	// Array patterns (can be comma-separated, etc)
+	pattern = pattern.replace(/\{labels(?::[^}]+)?\}/g, '<<<ANY>>>');
+	pattern = pattern.replace(/\{assignees(?::[^}]+)?\}/g, '<<<ANY>>>');
+
+	// Handle conditional blocks and any remaining variables
+	pattern = pattern.replace(/\{\w+:[^}]*\}/g, '<<<ANY>>>');
+	pattern = pattern.replace(/\{[^}]+\}/g, '<<<ANY>>>');
+
+	// Now escape special regex characters in the remaining static parts
+	pattern = escapeRegExp(pattern);
+
+	// Replace our placeholders with actual regex patterns
+	pattern = pattern.replace(/<<<NUMBER>>>/g, '(\\d+)');
+	pattern = pattern.replace(/<<<TITLE>>>/g, '(.+?)'); // More permissive for titles
+	pattern = pattern.replace(/<<<WORD>>>/g, '[A-Za-z0-9_-]+');
+	pattern = pattern.replace(/<<<NOSPACE>>>/g, '[A-Za-z0-9_-]+');
+	pattern = pattern.replace(/<<<OPTIONAL_NOSPACE>>>/g, '[A-Za-z0-9_-]*');
+	pattern = pattern.replace(/<<<DATE>>>/g, '[\\d\\-T:Z\\s]+');
+	pattern = pattern.replace(/<<<OPTIONAL_DATE>>>/g, '[\\d\\-T:Z\\s]*');
+	pattern = pattern.replace(/<<<ANY>>>/g, '.*?');
 
 	// Create the regex and try to match
 	try {
@@ -495,6 +519,7 @@ export function extractNumberFromFilename(filename: string, template: string): s
 		}
 	} catch (error) {
 		console.warn(`Failed to parse filename "${filename}" with template "${template}":`, error);
+		console.warn(`Generated regex pattern: ${pattern}`);
 	}
 
 	return null;

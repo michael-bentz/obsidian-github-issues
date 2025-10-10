@@ -1,5 +1,6 @@
 ---
 title: "{title_yaml}"
+number: {number}
 status: "{status}"
 created: "{created}"
 url: "{url}"
