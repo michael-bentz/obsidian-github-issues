@@ -67,7 +67,7 @@ export class FileManager {
 		);
 
 		// Create or update issue files for open issues
-		for (const issue of openIssues) {
+		for (const issue of allIssuesIncludingRecentlyClosed) {
 			await this.createOrUpdateIssueFile(
 				effectiveRepo,
 				ownerCleaned,
@@ -102,7 +102,7 @@ export class FileManager {
 			allPullRequestsIncludingRecentlyClosed,
 		);
 
-		for (const pr of openPullRequests) {
+		for (const pr of allPullRequestsIncludingRecentlyClosed) {
 			await this.createOrUpdatePullRequestFile(
 				effectiveRepo,
 				ownerCleaned,
